@@ -20,6 +20,9 @@ app.use(express.json())
 app.use(express.static(join(process.cwd(), 'public')))
 
 // Mount API routes
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime() })
+})
 app.use('/api/wallets', walletsRouter)
 app.use('/api/analyze', analyzeRouter)
 app.use('/api/gas', gasRouter)
