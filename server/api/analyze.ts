@@ -21,6 +21,7 @@ router.post('/', async (req, res) => {
       analysis: {
         contractAddress: analysis.contractAddress,
         isVerified: analysis.isVerified,
+        isSeaDrop: analysis.isSeaDrop ?? false,
         wlType: analysis.wlType,
         saleActive: analysis.saleActive ?? null,
         saleStateFn: analysis.saleStateFn ?? null,
@@ -30,6 +31,7 @@ router.post('/', async (req, res) => {
         maxSupply: analysis.maxSupply?.toString() ?? null,
         mintFunctions: analysis.mintFunctions,
         detectedMintFn: analysis.detectedMintFn ?? null,
+        seaDropInfo: analysis.seaDropInfo ?? null,
       },
     })
   } catch (err) {

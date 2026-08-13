@@ -519,7 +519,16 @@
               </select>
             </div>
           </div>
-          <div style="display: flex; gap: 12px; margin-top: 8px;">
+          <div class="form-group" style="margin-top: 4px;">
+            <label style="display: flex; justify-content: space-between; align-items: center;">
+              <span>Select Active Wallets for Session</span>
+              <span style="font-size: 0.75rem; text-transform: none; font-weight: 600; color: var(--accent); cursor: pointer;" onclick="toggleAllSessionWallets()">Toggle All</span>
+            </label>
+            <div id="session-wallets-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; padding: 12px; background: #FFFFFF; border: var(--border-width) solid var(--border); border-radius: 8px;">
+              <span style="color: var(--text-muted); font-size: 0.85rem;">Loading wallets...</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 12px; margin-top: 16px;">
             <button type="submit" id="btn-start" class="btn btn-primary">
               <i data-lucide="send"></i> Start Session
             </button>
@@ -764,12 +773,20 @@
 
     async function handleStartSession(e) {
       e.preventDefault();
+      const selectedWallets = Array.from(document.querySelectorAll('.session-wallet-cb:checked')).map(cb => parseInt(cb.value, 10));
+
+      if (selectedWallets.length === 0) {
+        alert('Please select at least one wallet to participate in the session.');
+        return;
+      }
+
       const payload = {
         target: document.getElementById('target-input').value,
         mode: document.getElementById('mode-select').value,
         quantity: parseInt(document.getElementById('qty-input').value, 10),
         priceEth: document.getElementById('price-input').value,
         gasStrategy: document.getElementById('gas-select').value,
+        selectedWallets,
       };
 
       try {
@@ -783,6 +800,12 @@
       } catch (err) {
         alert(err);
       }
+    }
+
+    function toggleAllSessionWallets() {
+      const cbs = document.querySelectorAll('.session-wallet-cb');
+      const allChecked = Array.from(cbs).every(cb => cb.checked);
+      cbs.forEach(cb => cb.checked = !allChecked);
     }
 
     async function handleStopSession() {
@@ -814,13 +837,32 @@
 
         const a = data.analysis;
         resDiv.style.display = 'block';
+
+        let seaDropHtml = '';
+        if (a.seaDropInfo) {
+          seaDropHtml = `
+            <div style="margin-top: 14px; padding: 14px; background: var(--accent-light); border: var(--border-width) solid var(--border); border-radius: 8px;">
+              <p style="font-weight: 800; color: var(--accent); margin-bottom: 6px;">🚀 OpenSea Launchpad Public Stage:</p>
+              <p><strong>Stage Price:</strong> ${a.seaDropInfo.mintPriceEth} ETH</p>
+              <p><strong>Limit / Wallet:</strong> ${a.seaDropInfo.maxTotalMintableByWallet} per wallet</p>
+              <p><strong>Start Time:</strong> ${a.seaDropInfo.startTimeIso}</p>
+              <p><strong>End Time:</strong> ${a.seaDropInfo.endTimeIso}</p>
+              <p><strong>Stage Status:</strong> ${a.seaDropInfo.isLive ? '<span class="badge badge-green">LIVE NOW</span>' : '<span class="badge badge-amber">SCHEDULED</span>'}</p>
+            </div>
+          `;
+        }
+
         details.innerHTML = `
           <p><strong>Contract:</strong> <code>${a.contractAddress}</code></p>
+          <p><strong>Type:</strong> ${a.isSeaDrop ? 'OpenSea SeaDrop / Launchpad' : 'Standard ERC-721'}</p>
           <p><strong>Verified:</strong> ${a.isVerified ? '✓ Yes' : '✗ No'}</p>
           <p><strong>Sale Status:</strong> ${a.saleActive ? '<span class="badge badge-green">ACTIVE</span>' : '<span class="badge badge-red">INACTIVE</span>'}</p>
           <p><strong>Price:</strong> ${a.mintPriceEth ? a.mintPriceEth + ' ETH' : 'Unknown / Check Launchpad'}</p>
+          <p><strong>Limit / Wallet:</strong> ${a.maxPerWallet ? a.maxPerWallet : 'Check Stage'}</p>
+          <p><strong>Total Minted:</strong> ${a.totalSupply ? a.totalSupply + (a.maxSupply ? ' / ' + a.maxSupply : '') : 'Unknown'}</p>
           <p><strong>WL Type:</strong> ${a.wlType}</p>
-          <p><strong>Recommended Mint Fn:</strong> <code>${a.detectedMintFn || 'None detected'}</code></p>
+          <p><strong>Recommended Mint Fn:</strong> <code>${a.detectedMintFn || 'mintSeaDrop / Launchpad Router'}</code></p>
+          ${seaDropHtml}
         `;
       } catch (err) {
         alert(err);
@@ -829,11 +871,13 @@
 
     async function fetchWallets() {
       const tbody = document.getElementById('wallets-tbody');
+      const sessionList = document.getElementById('session-wallets-list');
       try {
         const res = await fetch(`${API}/wallets`);
         const data = await res.json();
         if (data.wallets.length === 0) {
           tbody.innerHTML = '<tr><td colspan="4" style="color: var(--text-muted);">No wallets configured. Add one above.</td></tr>';
+          sessionList.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85rem;">No wallets configured. Add wallets first.</span>';
           return;
         }
 
@@ -849,9 +893,18 @@
             </td>
           </tr>
         `).join('');
+
+        sessionList.innerHTML = data.wallets.map(w => `
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; user-select: none;">
+            <input type="checkbox" class="session-wallet-cb" value="${w.index}" checked>
+            <span>Wallet ${w.index} <code style="font-size: 0.75rem; color: var(--text-muted);">${w.address.slice(0,6)}...${w.address.slice(-4)}</code> (${w.balanceEth} ETH)</span>
+          </label>
+        `).join('');
+
         lucide.createIcons();
       } catch (err) {
         tbody.innerHTML = '<tr><td colspan="4" style="color: var(--red);">Failed to load wallets.</td></tr>';
+        sessionList.innerHTML = '<span style="color: var(--red); font-size: 0.85rem;">Failed to load wallets.</span>';
       }
     }
 

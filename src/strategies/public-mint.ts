@@ -18,6 +18,8 @@ export interface PublicMintOptions {
   /** Gas strategy */
   gasStrategy: GasStrategy
   customGasPriceGwei?: number
+  /** Which wallet indices to use (e.g. [1, 3]). Defaults to all wallets if omitted. */
+  walletIndices?: number[]
 }
 
 /**
@@ -31,13 +33,16 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
   logger.info(`Function: ${opts.functionName}(${opts.quantity})`)
   logger.info(`Price: ${opts.priceEth} ETH × ${opts.quantity} = ${parseFloat(opts.priceEth) * opts.quantity} ETH per wallet`)
   logger.info(`Gas strategy: ${opts.gasStrategy}`)
+  if (opts.walletIndices && opts.walletIndices.length > 0) {
+    logger.info(`Selected wallets: Wallet ${opts.walletIndices.join(', Wallet ')}`)
+  }
   logger.divider()
 
   const publicClient = getPublicClient()
   const settings = getSettings()
 
   // Load and filter wallets by balance
-  const wallets = await loadBalances()
+  const wallets = await loadBalances(true, false, opts.walletIndices)
   const totalCostEth = (parseFloat(opts.priceEth) * opts.quantity).toString()
   const totalCostWei = parseEther(totalCostEth)
 

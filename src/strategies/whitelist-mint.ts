@@ -23,6 +23,7 @@ export interface WhitelistMintOptions {
   priceEth: string
   gasStrategy: GasStrategy
   customGasPriceGwei?: number
+  walletIndices?: number[]
 }
 
 /**
@@ -76,7 +77,7 @@ export async function runWhitelistMint(opts: WhitelistMintOptions): Promise<void
   const totalCostEth = (parseFloat(opts.priceEth) * opts.quantity).toString()
   const totalCostWei = parseEther(totalCostEth)
 
-  const wallets = await loadBalances()
+  const wallets = await loadBalances(true, false, opts.walletIndices)
   const solvent = filterSolventWallets(wallets, totalCostWei)
 
   if (solvent.length === 0) {

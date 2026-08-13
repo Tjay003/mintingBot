@@ -16,6 +16,8 @@ export interface SnipeMintOptions {
   customGasPriceGwei?: number
   /** Optional signal to abort the snipe (used by dashboard server) */
   signal?: AbortSignal
+  /** Which wallet indices to use (e.g. [1, 3]). Defaults to all wallets if omitted. */
+  walletIndices?: number[]
 }
 
 /**
@@ -33,6 +35,9 @@ export async function runSnipeMint(opts: SnipeMintOptions): Promise<void> {
   logger.info(`Function: ${opts.functionName}(${opts.quantity})`)
   logger.info(`Price: ${opts.priceEth} ETH × ${opts.quantity} per wallet`)
   logger.info(`Gas strategy: ${opts.gasStrategy} (tip: use "turbo" for hot mints)`)
+  if (opts.walletIndices && opts.walletIndices.length > 0) {
+    logger.info(`Selected wallets: Wallet ${opts.walletIndices.join(', Wallet ')}`)
+  }
   logger.divider()
 
   const publicClient = getPublicClient()
@@ -42,7 +47,7 @@ export async function runSnipeMint(opts: SnipeMintOptions): Promise<void> {
   const totalCostEth = (parseFloat(opts.priceEth) * opts.quantity).toString()
   const totalCostWei = parseEther(totalCostEth)
 
-  const wallets = await loadBalances()
+  const wallets = await loadBalances(true, false, opts.walletIndices)
   const solvent = filterSolventWallets(wallets, totalCostWei)
 
   if (solvent.length === 0) {

@@ -84,10 +84,13 @@ export function getWallets(forceReload = false): ManagedWallet[] {
 }
 
 /**
- * Fetch and cache ETH balances for all wallets. Prints a table.
+ * Fetch and cache ETH balances for all wallets (or specific indices). Prints a table.
  */
-export async function loadBalances(print = true, forceReload = false): Promise<ManagedWallet[]> {
-  const wallets = getWallets(forceReload)
+export async function loadBalances(print = true, forceReload = false, walletIndices?: number[]): Promise<ManagedWallet[]> {
+  let wallets = getWallets(forceReload)
+  if (walletIndices && walletIndices.length > 0) {
+    wallets = wallets.filter((w) => walletIndices.includes(w.index))
+  }
   const publicClient = getPublicClient()
 
   const balances = await Promise.all(

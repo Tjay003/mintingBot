@@ -7,6 +7,13 @@ import {
 } from 'viem'
 import { logger } from './logger.js'
 
+/** Canonical SeaDrop router addresses across EVM chains */
+const SEADROP_ROUTERS: Address[] = [
+  '0x00005EA00Ac477B1030CE78506496e8C2dE24bf5',
+  '0x0000000005B502c4748b1576532828042b220000',
+  '0x000000000000068F116a894984e2DB1123eB395',
+]
+
 /** ABI fragments used for analysis probing */
 const PROBE_ABI = [
   // Sale state
@@ -28,7 +35,7 @@ const PROBE_ABI = [
   { name: 'totalSupply', type: 'function', inputs: [], outputs: [{ type: 'uint256' }], stateMutability: 'view' },
   { name: 'maxSupply', type: 'function', inputs: [], outputs: [{ type: 'uint256' }], stateMutability: 'view' },
   { name: 'MAX_SUPPLY', type: 'function', inputs: [], outputs: [{ type: 'uint256' }], stateMutability: 'view' },
-  // SeaDrop / OpenSea Launchpad stats
+  // SeaDrop getMintStats
   {
     name: 'getMintStats',
     type: 'function',
@@ -37,6 +44,27 @@ const PROBE_ABI = [
       { name: 'minterNumMinted', type: 'uint256' },
       { name: 'currentTotalSupply', type: 'uint256' },
       { name: 'maxSupply', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+  },
+  // SeaDrop getPublicDrop
+  {
+    name: 'getPublicDrop',
+    type: 'function',
+    inputs: [{ name: 'seaDropImpl', type: 'address' }],
+    outputs: [
+      {
+        components: [
+          { name: 'mintPrice', type: 'uint80' },
+          { name: 'startTime', type: 'uint48' },
+          { name: 'endTime', type: 'uint48' },
+          { name: 'maxTotalMintableByWallet', type: 'uint16' },
+          { name: 'feeBps', type: 'uint16' },
+          { name: 'restrictFeeRecipients', type: 'bool' },
+        ],
+        name: '',
+        type: 'tuple',
+      },
     ],
     stateMutability: 'view',
   },
@@ -60,6 +88,17 @@ type MintSig = (typeof MINT_SIGNATURES)[number]
 
 export type WlType = 'merkle-proof' | 'signature' | 'none' | 'unknown'
 
+export interface SeaDropPublicDropInfo {
+  mintPrice: bigint
+  mintPriceEth: string
+  startTime: number
+  endTime: number
+  maxTotalMintableByWallet: number
+  startTimeIso: string
+  endTimeIso: string
+  isLive: boolean
+}
+
 export interface ContractAnalysis {
   contractAddress: Address
   mintFunctions: MintSig[]
@@ -74,11 +113,12 @@ export interface ContractAnalysis {
   maxSupply?: bigint
   isVerified: boolean
   isSeaDrop?: boolean
+  seaDropInfo?: SeaDropPublicDropInfo
 }
 
 /**
  * Probe a single read-only function on the contract.
- * Returns the result or undefined if the call fails (function doesn't exist).
+ * Returns the result or undefined if the call fails.
  */
 async function probe<T>(
   client: PublicClient,
@@ -120,8 +160,7 @@ async function fetchAbiFromBlockscout(
 }
 
 /**
- * Detect which mint function signatures exist on the contract
- * by probing function selectors.
+ * Detect which mint function signatures exist on the contract.
  */
 function detectMintFunctionsFromAbi(abi: unknown[]): MintSig[] {
   const found: MintSig[] = []
@@ -151,7 +190,7 @@ function detectWlType(mintFns: MintSig[]): WlType {
 
 /**
  * Full contract analysis — fetches ABI if verified, probes state functions,
- * detects mint price, WL type, and whether sale is active.
+ * detects SeaDrop structs (price, schedule, wallet limits), WL type, and sale state.
  */
 export async function analyzeContract(
   publicClient: PublicClient,
@@ -178,17 +217,13 @@ export async function analyzeContract(
   if (isVerified) {
     mintFunctions = detectMintFunctionsFromAbi(verifiedAbi!)
   } else {
-    // For unverified contracts, all common signatures are candidates
     mintFunctions = [...MINT_SIGNATURES]
   }
 
   const isSeaDrop = mintFunctions.includes('mintSeaDrop(address,uint256)') ||
     (verifiedAbi?.some((item: any) => item.name === 'mintSeaDrop') ?? false)
 
-  // 3. Determine WL type
-  const wlType = detectWlType(mintFunctions)
-
-  // 4. Probe state variables (works regardless of verification)
+  // 3. Probe standard state variables & SeaDrop structs
   const [
     saleIsActive,
     publicSaleActive,
@@ -225,22 +260,59 @@ export async function analyzeContract(
     probe<[bigint, bigint, bigint]>(publicClient, contractAddress, PROBE_ABI[15], [zeroAddress]),
   ])
 
+  // Probe SeaDrop getPublicDrop across known routers
+  let seaDropInfo: SeaDropPublicDropInfo | undefined
+  if (isSeaDrop) {
+    for (const router of SEADROP_ROUTERS) {
+      const pd = await probe<{
+        mintPrice: bigint
+        startTime: number
+        endTime: number
+        maxTotalMintableByWallet: number
+      }>(publicClient, contractAddress, PROBE_ABI[16], [router])
+
+      if (pd && pd.maxTotalMintableByWallet > 0) {
+        const now = Math.floor(Date.now() / 1000)
+        const start = Number(pd.startTime)
+        const end = Number(pd.endTime)
+        seaDropInfo = {
+          mintPrice: BigInt(pd.mintPrice),
+          mintPriceEth: formatEther(BigInt(pd.mintPrice)),
+          startTime: start,
+          endTime: end,
+          maxTotalMintableByWallet: Number(pd.maxTotalMintableByWallet),
+          startTimeIso: new Date(start * 1000).toLocaleString(),
+          endTimeIso: new Date(end * 1000).toLocaleString(),
+          isLive: now >= start && now <= end,
+        }
+        break
+      }
+    }
+  }
+
+  // Determine WL type
+  const wlType = detectWlType(mintFunctions)
+
   // Resolve sale state
   let saleActive: boolean | undefined
   let saleStateFn: string | undefined
-  if (saleIsActive !== undefined) { saleActive = saleIsActive; saleStateFn = 'saleIsActive' }
+  if (seaDropInfo) {
+    saleActive = seaDropInfo.isLive
+    saleStateFn = `SeaDrop Public Stage (${seaDropInfo.isLive ? 'LIVE' : 'SCHEDULED'})`
+  } else if (saleIsActive !== undefined) { saleActive = saleIsActive; saleStateFn = 'saleIsActive' }
   else if (publicSaleActive !== undefined) { saleActive = publicSaleActive; saleStateFn = 'publicSaleActive' }
   else if (mintEnabled !== undefined) { saleActive = mintEnabled; saleStateFn = 'mintEnabled' }
   else if (paused !== undefined) { saleActive = !paused; saleStateFn = 'paused (inverted)' }
-  else if (isSeaDrop) { saleActive = true; saleStateFn = 'SeaDrop (OpenSea Launchpad)' }
+  else if (isSeaDrop) { saleActive = false; saleStateFn = 'SeaDrop (Check launchpad stage)' }
 
   // Resolve mint price
-  const mintPriceWei = mintPriceRaw ?? priceRaw ?? costRaw ?? PRICE_raw ?? publicMintPriceRaw
+  const mintPriceWei = seaDropInfo ? seaDropInfo.mintPrice : (mintPriceRaw ?? priceRaw ?? costRaw ?? PRICE_raw ?? publicMintPriceRaw)
+  const mintPriceEth = seaDropInfo ? seaDropInfo.mintPriceEth : (mintPriceWei != null ? formatEther(mintPriceWei) : undefined)
 
   // Resolve max per wallet
-  const resolvedMaxPerWallet = maxPerWallet ?? maxMintPerWallet ?? MAX_PER_WALLET
+  const resolvedMaxPerWallet = seaDropInfo ? BigInt(seaDropInfo.maxTotalMintableByWallet) : (maxPerWallet ?? maxMintPerWallet ?? MAX_PER_WALLET)
 
-  // Resolve supply (including SeaDrop getMintStats)
+  // Resolve supply
   let resolvedTotalSupply = totalSupply
   let resolvedMaxSupply = maxSupply ?? MAX_SUPPLY
 
@@ -274,12 +346,13 @@ export async function analyzeContract(
     saleActive,
     saleStateFn,
     mintPriceWei,
-    mintPriceEth: mintPriceWei != null ? formatEther(mintPriceWei) : undefined,
+    mintPriceEth,
     maxPerWallet: resolvedMaxPerWallet,
     totalSupply: resolvedTotalSupply,
     maxSupply: resolvedMaxSupply,
     isVerified,
     isSeaDrop,
+    seaDropInfo,
   }
 }
 
@@ -293,22 +366,23 @@ export function printAnalysis(a: ContractAnalysis): void {
   logger.info(`Verified: ${a.isVerified ? '✓ Yes (Blockscout)' : '✗ No (probing signatures)'}`)
   logger.info(`WL Type:  ${a.wlType}`)
 
-  if (a.saleActive !== undefined) {
-    const status = a.saleActive
-      ? '🟢 ACTIVE'
-      : '🔴 NOT ACTIVE'
+  if (a.seaDropInfo) {
+    logger.info(`[SeaDrop Stage Details]`)
+    logger.info(`  Public Price:  ${a.seaDropInfo.mintPriceEth} ETH`)
+    logger.info(`  Limit/Wallet:  ${a.seaDropInfo.maxTotalMintableByWallet}`)
+    logger.info(`  Start Time:    ${a.seaDropInfo.startTimeIso}`)
+    logger.info(`  End Time:      ${a.seaDropInfo.endTimeIso}`)
+    logger.info(`  Stage Status:  ${a.seaDropInfo.isLive ? '🟢 LIVE NOW' : '🔴 SCHEDULED'}`)
+  } else if (a.saleActive !== undefined) {
+    const status = a.saleActive ? '🟢 ACTIVE' : '🔴 NOT ACTIVE'
     logger.info(`Sale:     ${status}  (via ${a.saleStateFn})`)
-  } else {
-    logger.warn(`Sale:     ❓ Could not detect sale state function`)
   }
 
-  if (a.mintPriceEth != null) {
+  if (a.mintPriceEth != null && !a.seaDropInfo) {
     logger.info(`Price:    ${a.mintPriceEth} ETH per mint`)
-  } else {
-    logger.warn(`Price:    ${a.isSeaDrop ? 'SeaDrop (Check launchpad UI for stage price)' : '❓ Could not detect mint price'}`)
   }
 
-  if (a.maxPerWallet != null) {
+  if (a.maxPerWallet != null && !a.seaDropInfo) {
     logger.info(`Max/wallet: ${a.maxPerWallet}`)
   }
 

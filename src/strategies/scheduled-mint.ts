@@ -16,6 +16,7 @@ export interface ScheduledMintOptions {
   mintTime: string
   gasStrategy: GasStrategy
   customGasPriceGwei?: number
+  walletIndices?: number[]
 }
 
 /**
@@ -47,7 +48,7 @@ export async function runScheduledMint(opts: ScheduledMintOptions): Promise<void
   const totalCostWei = parseEther(totalCostEth)
 
   // Pre-load balances now — don't wait until mint time
-  const wallets = await loadBalances()
+  const wallets = await loadBalances(true, false, opts.walletIndices)
   const solvent = filterSolventWallets(wallets, totalCostWei)
 
   if (solvent.length === 0) {

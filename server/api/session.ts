@@ -46,6 +46,7 @@ router.post('/start', async (req, res) => {
     proof,
     signature,
     mintTime,
+    selectedWallets,
   } = req.body as {
     mode: SessionMode
     target: string
@@ -58,6 +59,7 @@ router.post('/start', async (req, res) => {
     proof?: string
     signature?: string
     mintTime?: string
+    selectedWallets?: number[]
   }
 
   if (!mode || !target) {
@@ -94,6 +96,7 @@ router.post('/start', async (req, res) => {
             priceEth,
             gasStrategy,
             customGasPriceGwei,
+            walletIndices: selectedWallets,
           })
         } else if (mode === 'snipe') {
           await runSnipeMint({
@@ -104,6 +107,7 @@ router.post('/start', async (req, res) => {
             gasStrategy,
             customGasPriceGwei,
             signal: abortController.signal,
+            walletIndices: selectedWallets,
           })
         } else if (mode === 'whitelist') {
           let parsedProof: `0x${string}`[] | undefined
@@ -124,6 +128,7 @@ router.post('/start', async (req, res) => {
             priceEth,
             gasStrategy,
             customGasPriceGwei,
+            walletIndices: selectedWallets,
           })
         } else if (mode === 'scheduled') {
           if (!mintTime) throw new Error('Missing mintTime for scheduled mint')
@@ -135,6 +140,7 @@ router.post('/start', async (req, res) => {
             mintTime,
             gasStrategy,
             customGasPriceGwei,
+            walletIndices: selectedWallets,
           })
         }
 
