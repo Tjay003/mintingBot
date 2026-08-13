@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import { createServer } from 'http'
 import { join } from 'path'
+import { fileURLToPath } from 'url'
 import { attachWebSocket } from './ws-emitter.js'
 import { walletsRouter } from './api/wallets.js'
 import { analyzeRouter } from './api/analyze.js'
@@ -40,7 +41,10 @@ export function startServer(): Promise<void> {
   })
 }
 
-// If executed directly via `node server/index.js` or `tsx server/index.ts`
-if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}`) {
+// Check if run directly
+const currentFilePath = fileURLToPath(import.meta.url)
+const entryFilePath = process.argv[1] ? join(process.argv[1]) : ''
+
+if (currentFilePath.toLowerCase() === entryFilePath.toLowerCase() || process.argv.slice(2).includes('--standalone')) {
   startServer()
 }

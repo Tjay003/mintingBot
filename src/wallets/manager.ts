@@ -52,9 +52,17 @@ export function getWsPublicClient(): PublicClient {
 }
 
 /**
+ * Reset cached wallets array (used when settings/keys are updated)
+ */
+export function resetWallets(): void {
+  _wallets = []
+}
+
+/**
  * Load all wallets from settings. Cached after first call.
  */
-export function getWallets(): ManagedWallet[] {
+export function getWallets(forceReload = false): ManagedWallet[] {
+  if (forceReload) resetWallets()
   if (_wallets.length > 0) return _wallets
   const { walletKeys, rpc } = getSettings()
 
@@ -78,8 +86,8 @@ export function getWallets(): ManagedWallet[] {
 /**
  * Fetch and cache ETH balances for all wallets. Prints a table.
  */
-export async function loadBalances(print = true): Promise<ManagedWallet[]> {
-  const wallets = getWallets()
+export async function loadBalances(print = true, forceReload = false): Promise<ManagedWallet[]> {
+  const wallets = getWallets(forceReload)
   const publicClient = getPublicClient()
 
   const balances = await Promise.all(

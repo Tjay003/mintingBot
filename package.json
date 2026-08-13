@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "tsx src/index.ts",
-    "ui": "tsx server/index.ts",
+    "ui": "tsx server/index.ts --standalone",
     "build": "tsup src/index.ts --format esm --dts --clean",
     "mintbot": "tsx src/index.ts",
     "typecheck": "tsc --noEmit"

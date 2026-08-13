@@ -474,6 +474,7 @@
         const data = await res.json();
         if (!res.ok) alert(data.error);
         else {
+          alert(`✅ Wallet Added!\nAddress: ${data.address}`);
           document.getElementById('key-input').value = '';
           fetchWallets();
         }
@@ -519,6 +520,7 @@
 
     window.onload = () => {
       initWS();
+      fetchWallets();
     };
   </script>
 </body>

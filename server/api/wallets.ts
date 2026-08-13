@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getWallets, loadBalances, type ManagedWallet } from '../../src/wallets/manager.js'
+import { getWallets, loadBalances, resetWallets, type ManagedWallet } from '../../src/wallets/manager.js'
 import { formatEther } from 'viem'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
@@ -7,7 +7,6 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { resetSettings } from '../../src/config/settings.js'
 
 const router = Router()
-
 const ENV_PATH = join(process.cwd(), '.env')
 
 function readEnvFile(): string {
@@ -22,7 +21,7 @@ function writeEnvFile(content: string): void {
 /** GET /api/wallets — list all wallets with balances */
 router.get('/', async (_req, res) => {
   try {
-    const wallets = await loadBalances(false)
+    const wallets = await loadBalances(false, true)
     const data = wallets.map((w: ManagedWallet) => ({
       index: w.index,
       address: w.address,
@@ -31,7 +30,7 @@ router.get('/', async (_req, res) => {
     }))
     res.json({ wallets: data })
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    res.json({ wallets: [] })
   }
 })
 
@@ -45,31 +44,32 @@ router.post('/', (req, res) => {
   }
 
   try {
-    // Validate the key by deriving the address
     const account = privateKeyToAccount(privateKey as `0x${string}`)
-
-    // Find next available slot
     let envContent = readEnvFile()
-    let slot = 1
-    while (envContent.includes(`WALLET_KEY_${slot}=`)) {
-      const line = envContent.split('\n').find((l) => l.startsWith(`WALLET_KEY_${slot}=`))
-      const val = line?.split('=')[1]?.trim()
-      if (!val || val === '') break
-      slot++
-    }
 
-    // Update or append the key
-    const keyVar = `WALLET_KEY_${slot}`
-    if (envContent.includes(`${keyVar}=`)) {
-      envContent = envContent.replace(new RegExp(`${keyVar}=.*`), `${keyVar}=${privateKey}`)
-    } else {
-      envContent += `\n${keyVar}=${privateKey}`
-    }
+    // Collect existing valid keys
+    const lines = envContent.split('\n')
+    const nonWalletLines = lines.filter((l) => !l.trim().startsWith('WALLET_KEY_'))
+    const existingKeys = lines
+      .filter((l) => l.trim().startsWith('WALLET_KEY_'))
+      .map((l) => l.split('=')[1]?.trim())
+      .filter((k): k is string => Boolean(k) && k.startsWith('0x') && k.length === 66 && k !== privateKey)
 
-    writeEnvFile(envContent)
-    resetSettings() // force reload
+    // Add new key
+    existingKeys.push(privateKey)
 
-    res.json({ success: true, address: account.address, slot })
+    // Rebuild env content
+    let newEnv = nonWalletLines.join('\n').trim()
+    newEnv += '\n\n# Wallet Private Keys\n'
+    existingKeys.forEach((key, i) => {
+      newEnv += `WALLET_KEY_${i + 1}=${key}\n`
+    })
+
+    writeEnvFile(newEnv)
+    resetSettings()
+    resetWallets()
+
+    res.json({ success: true, address: account.address, slot: existingKeys.length })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -84,17 +84,32 @@ router.delete('/:index', (req, res) => {
   }
 
   try {
-    let envContent = readEnvFile()
-    const keyVar = `WALLET_KEY_${idx}`
-    if (!envContent.includes(`${keyVar}=`)) {
+    const envContent = readEnvFile()
+    const lines = envContent.split('\n')
+    const nonWalletLines = lines.filter((l) => !l.trim().startsWith('WALLET_KEY_'))
+    const walletKeys = lines
+      .filter((l) => l.trim().startsWith('WALLET_KEY_'))
+      .map((l) => l.split('=')[1]?.trim())
+      .filter((k): k is string => Boolean(k) && k.startsWith('0x') && k.length === 66)
+
+    if (idx > walletKeys.length) {
       res.status(404).json({ error: `Wallet ${idx} not found.` })
       return
     }
 
-    // Clear the key value (keep the line but blank it)
-    envContent = envContent.replace(new RegExp(`${keyVar}=.*`), `${keyVar}=`)
-    writeEnvFile(envContent)
+    // Remove key at idx - 1
+    walletKeys.splice(idx - 1, 1)
+
+    // Rebuild env content
+    let newEnv = nonWalletLines.join('\n').trim()
+    newEnv += '\n\n# Wallet Private Keys\n'
+    walletKeys.forEach((key, i) => {
+      newEnv += `WALLET_KEY_${i + 1}=${key}\n`
+    })
+
+    writeEnvFile(newEnv)
     resetSettings()
+    resetWallets()
 
     res.json({ success: true })
   } catch (err) {
