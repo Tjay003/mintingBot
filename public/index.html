@@ -69,7 +69,6 @@
     .brand {
       display: flex;
       align-items: center;
-      justify-content: space-between;
       margin-bottom: 28px;
       padding: 0 4px;
       height: 36px;
@@ -109,24 +108,36 @@
       display: none;
     }
 
+    /* Floating Toggle Button on Right Edge of Sidebar */
     .sidebar-toggle-btn {
+      position: absolute;
+      top: 24px;
+      right: -15px;
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 28px;
-      height: 28px;
+      width: 30px;
+      height: 30px;
       background: #FFFFFF;
       border: var(--border-width) solid var(--border);
-      border-radius: 6px;
+      border-radius: 50%;
       cursor: pointer;
-      box-shadow: 1px 1px 0px var(--border);
+      box-shadow: 2px 2px 0px var(--border);
       transition: all 0.15s ease;
       color: var(--text-main);
+      z-index: 20;
     }
+
     .sidebar-toggle-btn:hover {
-      background: var(--bg);
-      transform: translate(-1px, -1px);
-      box-shadow: 2px 2px 0px var(--border);
+      background: var(--accent-light);
+      color: var(--accent);
+      transform: scale(1.1);
+      box-shadow: 3px 3px 0px var(--border);
+    }
+
+    .sidebar-toggle-btn:active {
+      transform: scale(0.95);
+      box-shadow: 1px 1px 0px var(--border);
     }
 
     body.collapsed-sidebar .sidebar-toggle-btn i {
@@ -405,14 +416,14 @@
 
   <!-- Sidebar -->
   <aside id="sidebar">
+    <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle Sidebar">
+      <i data-lucide="chevron-left"></i>
+    </button>
     <div class="brand">
       <div class="brand-logo">
         <div class="brand-icon"><i data-lucide="bot"></i></div>
         <span class="brand-text">MintBot</span>
       </div>
-      <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle Sidebar">
-        <i data-lucide="chevron-left"></i>
-      </button>
     </div>
     <ul class="nav-list">
       <li class="nav-item">
