@@ -3,6 +3,7 @@ import {
   type PublicClient,
   formatEther,
   isAddress,
+  zeroAddress,
 } from 'viem'
 import { logger } from './logger.js'
 
@@ -27,12 +28,25 @@ const PROBE_ABI = [
   { name: 'totalSupply', type: 'function', inputs: [], outputs: [{ type: 'uint256' }], stateMutability: 'view' },
   { name: 'maxSupply', type: 'function', inputs: [], outputs: [{ type: 'uint256' }], stateMutability: 'view' },
   { name: 'MAX_SUPPLY', type: 'function', inputs: [], outputs: [{ type: 'uint256' }], stateMutability: 'view' },
+  // SeaDrop / OpenSea Launchpad stats
+  {
+    name: 'getMintStats',
+    type: 'function',
+    inputs: [{ name: 'minter', type: 'address' }],
+    outputs: [
+      { name: 'minterNumMinted', type: 'uint256' },
+      { name: 'currentTotalSupply', type: 'uint256' },
+      { name: 'maxSupply', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+  },
 ] as const
 
 /** Known mint function signatures to probe */
 const MINT_SIGNATURES = [
   'mint(uint256)',
   'publicMint(uint256)',
+  'mintSeaDrop(address,uint256)',
   'mint(uint256,bytes32[])',
   'whitelistMint(uint256,bytes32[])',
   'presaleMint(uint256,bytes32[])',
@@ -59,6 +73,7 @@ export interface ContractAnalysis {
   totalSupply?: bigint
   maxSupply?: bigint
   isVerified: boolean
+  isSeaDrop?: boolean
 }
 
 /**
@@ -68,13 +83,16 @@ export interface ContractAnalysis {
 async function probe<T>(
   client: PublicClient,
   address: Address,
-  fn: { name: string; type: string; inputs: readonly unknown[]; outputs: readonly unknown[]; stateMutability: string },
+  fn: unknown,
+  args: readonly unknown[] = [],
 ): Promise<T | undefined> {
   try {
+    const fnDef = fn as { name: string }
     return await client.readContract({
       address,
-      abi: [fn],
-      functionName: fn.name,
+      abi: [fnDef as any],
+      functionName: fnDef.name,
+      args: args as any,
     }) as T
   } catch {
     return undefined
@@ -164,6 +182,9 @@ export async function analyzeContract(
     mintFunctions = [...MINT_SIGNATURES]
   }
 
+  const isSeaDrop = mintFunctions.includes('mintSeaDrop(address,uint256)') ||
+    (verifiedAbi?.some((item: any) => item.name === 'mintSeaDrop') ?? false)
+
   // 3. Determine WL type
   const wlType = detectWlType(mintFunctions)
 
@@ -184,6 +205,7 @@ export async function analyzeContract(
     totalSupply,
     maxSupply,
     MAX_SUPPLY,
+    seaDropStats,
   ] = await Promise.all([
     probe<boolean>(publicClient, contractAddress, PROBE_ABI[0]),
     probe<boolean>(publicClient, contractAddress, PROBE_ABI[1]),
@@ -200,6 +222,7 @@ export async function analyzeContract(
     probe<bigint>(publicClient, contractAddress, PROBE_ABI[12]),
     probe<bigint>(publicClient, contractAddress, PROBE_ABI[13]),
     probe<bigint>(publicClient, contractAddress, PROBE_ABI[14]),
+    probe<[bigint, bigint, bigint]>(publicClient, contractAddress, PROBE_ABI[15], [zeroAddress]),
   ])
 
   // Resolve sale state
@@ -209,6 +232,7 @@ export async function analyzeContract(
   else if (publicSaleActive !== undefined) { saleActive = publicSaleActive; saleStateFn = 'publicSaleActive' }
   else if (mintEnabled !== undefined) { saleActive = mintEnabled; saleStateFn = 'mintEnabled' }
   else if (paused !== undefined) { saleActive = !paused; saleStateFn = 'paused (inverted)' }
+  else if (isSeaDrop) { saleActive = true; saleStateFn = 'SeaDrop (OpenSea Launchpad)' }
 
   // Resolve mint price
   const mintPriceWei = mintPriceRaw ?? priceRaw ?? costRaw ?? PRICE_raw ?? publicMintPriceRaw
@@ -216,13 +240,20 @@ export async function analyzeContract(
   // Resolve max per wallet
   const resolvedMaxPerWallet = maxPerWallet ?? maxMintPerWallet ?? MAX_PER_WALLET
 
-  // Resolve supply
-  const resolvedMaxSupply = maxSupply ?? MAX_SUPPLY
+  // Resolve supply (including SeaDrop getMintStats)
+  let resolvedTotalSupply = totalSupply
+  let resolvedMaxSupply = maxSupply ?? MAX_SUPPLY
 
-  // Pick best mint function (prefer public if available, fall back to generic)
+  if (seaDropStats) {
+    resolvedTotalSupply = seaDropStats[1]
+    resolvedMaxSupply = seaDropStats[2]
+  }
+
+  // Pick best mint function
   const mintPriorityOrder: MintSig[] = [
     'publicMint(uint256)',
     'mint(uint256)',
+    'mintSeaDrop(address,uint256)',
     'claim(uint256)',
     'freeMint()',
     'mint()',
@@ -245,9 +276,10 @@ export async function analyzeContract(
     mintPriceWei,
     mintPriceEth: mintPriceWei != null ? formatEther(mintPriceWei) : undefined,
     maxPerWallet: resolvedMaxPerWallet,
-    totalSupply,
+    totalSupply: resolvedTotalSupply,
     maxSupply: resolvedMaxSupply,
     isVerified,
+    isSeaDrop,
   }
 }
 
@@ -257,6 +289,7 @@ export async function analyzeContract(
 export function printAnalysis(a: ContractAnalysis): void {
   logger.divider()
   logger.info(`Contract: ${a.contractAddress}`)
+  logger.info(`Type:     ${a.isSeaDrop ? 'OpenSea SeaDrop / Launchpad' : 'Standard ERC-721'}`)
   logger.info(`Verified: ${a.isVerified ? '✓ Yes (Blockscout)' : '✗ No (probing signatures)'}`)
   logger.info(`WL Type:  ${a.wlType}`)
 
@@ -272,7 +305,7 @@ export function printAnalysis(a: ContractAnalysis): void {
   if (a.mintPriceEth != null) {
     logger.info(`Price:    ${a.mintPriceEth} ETH per mint`)
   } else {
-    logger.warn(`Price:    ❓ Could not detect mint price (check contract)`)
+    logger.warn(`Price:    ${a.isSeaDrop ? 'SeaDrop (Check launchpad UI for stage price)' : '❓ Could not detect mint price'}`)
   }
 
   if (a.maxPerWallet != null) {

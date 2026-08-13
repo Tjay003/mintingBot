@@ -202,6 +202,16 @@ export const COMMON_MINT_ABIS: Record<string, AbiFunction> = {
     outputs: [],
     stateMutability: 'payable',
   },
+  'mintSeaDrop(address,uint256)': {
+    name: 'mintSeaDrop',
+    type: 'function',
+    inputs: [
+      { name: 'minter', type: 'address' },
+      { name: 'quantity', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'payable',
+  },
   'mint(uint256,bytes32[])': {
     name: 'mint',
     type: 'function',
