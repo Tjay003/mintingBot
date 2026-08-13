@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { privateKeyToAccount } from 'viem/accounts'
 import { resetSettings } from '../../src/config/settings.js'
+import { getEthUsdtPrice, calcEthToUsdt } from '../utils/price.js'
 
 const router = Router()
 const ENV_PATH = join(process.cwd(), '.env')
@@ -18,17 +19,23 @@ function writeEnvFile(content: string): void {
   writeFileSync(ENV_PATH, content, 'utf-8')
 }
 
-/** GET /api/wallets — list all wallets with balances */
+/** GET /api/wallets — list all wallets with balances & USDT value */
 router.get('/', async (_req, res) => {
   try {
     const wallets = await loadBalances(false, true)
-    const data = wallets.map((w: ManagedWallet) => ({
-      index: w.index,
-      address: w.address,
-      balanceWei: w.balance?.toString() ?? '0',
-      balanceEth: parseFloat(formatEther(w.balance ?? 0n)).toFixed(4),
-    }))
-    res.json({ wallets: data })
+    const ethPriceUsdt = await getEthUsdtPrice()
+
+    const data = wallets.map((w: ManagedWallet) => {
+      const ethNum = parseFloat(formatEther(w.balance ?? 0n))
+      return {
+        index: w.index,
+        address: w.address,
+        balanceWei: w.balance?.toString() ?? '0',
+        balanceEth: ethNum.toFixed(4),
+        balanceUsdt: calcEthToUsdt(ethNum, ethPriceUsdt),
+      }
+    })
+    res.json({ ethPriceUsdt, wallets: data })
   } catch (err) {
     res.json({ wallets: [] })
   }

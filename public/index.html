@@ -466,6 +466,9 @@
     <header>
       <div class="header-title" id="page-title">Active Minting Session</div>
       <div class="header-status">
+        <div id="eth-price-badge" class="network-badge" style="color: var(--accent-dark);">
+          <i data-lucide="coins"></i> ETH: Loading...
+        </div>
         <div class="network-badge">
           <span class="dot"></span>
           <span>Robinhood Chain</span>
@@ -877,6 +880,9 @@
       try {
         const res = await fetch(`${API}/wallets`);
         const data = await res.json();
+        if (data.ethPriceUsdt) {
+          document.getElementById('eth-price-badge').innerHTML = `<i data-lucide="coins"></i> ETH: $${data.ethPriceUsdt.toLocaleString()} USDT`;
+        }
         if (data.wallets.length === 0) {
           tbody.innerHTML = '<tr><td colspan="4" style="color: var(--text-muted);">No wallets configured. Add one above.</td></tr>';
           sessionList.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85rem;">No wallets configured. Add wallets first.</span>';
@@ -887,7 +893,7 @@
           <tr>
             <td><strong>Wallet ${w.index}</strong></td>
             <td><code>${w.address}</code></td>
-            <td><strong>${w.balanceEth} ETH</strong></td>
+            <td><strong>${w.balanceEth} ETH</strong> <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">(~${w.balanceUsdt || '$0 USDT'})</span></td>
             <td>
               <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.75rem;" onclick="removeWallet(${w.index})">
                 <i data-lucide="trash-2"></i> Remove
@@ -941,9 +947,19 @@
       try {
         const res = await fetch(`${API}/gas`);
         const data = await res.json();
-        document.getElementById('gas-safe').innerText = `${data.strategies.safe} Gwei`;
-        document.getElementById('gas-fast').innerText = `${data.strategies.fast} Gwei`;
-        document.getElementById('gas-turbo').innerText = `${data.strategies.turbo} Gwei`;
+        if (data.ethPriceUsdt) {
+          document.getElementById('eth-price-badge').innerHTML = `<i data-lucide="coins"></i> ETH: $${data.ethPriceUsdt.toLocaleString()} USDT`;
+        }
+
+        const safe = data.strategies.safe;
+        const fast = data.strategies.fast;
+        const turbo = data.strategies.turbo;
+
+        document.getElementById('gas-safe').innerHTML = `${safe.gwei} Gwei <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-top: 2px;">~${safe.usdtEst} USDT gas fee</div>`;
+        document.getElementById('gas-fast').innerHTML = `${fast.gwei} Gwei <div style="font-size: 0.8rem; font-weight: 600; color: var(--accent-dark); margin-top: 2px;">~${fast.usdtEst} USDT gas fee</div>`;
+        document.getElementById('gas-turbo').innerHTML = `${turbo.gwei} Gwei <div style="font-size: 0.8rem; font-weight: 600; color: var(--green); margin-top: 2px;">~${turbo.usdtEst} USDT gas fee</div>`;
+
+        lucide.createIcons();
       } catch (err) {}
     }
 
