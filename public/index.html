@@ -3,19 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MintBot Dashboard — Robinhood Chain</title>
+  <title>MintBot — Robinhood Chain Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
   <style>
     :root {
-      --bg: #F8FAFC;
+      --bg: #F4F4F6;
       --card-bg: #FFFFFF;
-      --border: #E2E8F0;
+      --border: #0F172A;
+      --border-width: 2px;
+      --shadow-color: #0F172A;
+      --shadow: 3px 3px 0px var(--shadow-color);
+      --shadow-hover: 5px 5px 0px var(--shadow-color);
+      --shadow-active: 1px 1px 0px var(--shadow-color);
+      
       --text-main: #0F172A;
       --text-muted: #64748B;
+      
       --accent: #4F46E5;
-      --accent-hover: #4338CA;
       --accent-light: #EEF2FF;
       --green: #10B981;
       --green-light: #ECFDF5;
@@ -23,101 +31,424 @@
       --amber-light: #FFFBEB;
       --red: #EF4444;
       --red-light: #FEF2F2;
+      
       --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
+      --sidebar-width: 240px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: var(--font); background: var(--bg); color: var(--text-main); height: 100vh; display: flex; overflow: hidden; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
 
-    /* Sidebar */
-    aside { width: 240px; background: #FFFFFF; border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 24px 16px; shrink: 0; }
-    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.15rem; color: var(--text-main); margin-bottom: 32px; padding-left: 8px; }
-    .brand-icon { font-size: 1.4rem; }
-    .nav-list { display: flex; flex-direction: column; gap: 4px; list-style: none; }
-    .nav-item button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; border: none; background: transparent; color: var(--text-muted); font-family: var(--font); font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.15s ease; text-align: left; }
-    .nav-item button:hover { background: var(--bg); color: var(--text-main); }
-    .nav-item button.active { background: var(--accent-light); color: var(--accent); font-weight: 600; }
+    /* Sidebar - Neobrutalist Minimalist */
+    aside {
+      width: var(--sidebar-width);
+      background: #FFFFFF;
+      border-right: var(--border-width) solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 14px;
+      shrink: 0;
+      transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      z-index: 10;
+    }
 
-    /* Main Container */
-    main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    body.collapsed-sidebar aside {
+      --sidebar-width: 72px;
+      padding: 20px 10px;
+    }
 
-    /* Top Bar */
-    header { height: 64px; background: #FFFFFF; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; }
-    .header-title { font-size: 1.1rem; font-weight: 600; }
-    .header-status { display: flex; align-items: center; gap: 16px; font-size: 0.85rem; }
-    .network-badge { display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: #F1F5F9; border-radius: 20px; font-weight: 500; color: var(--text-muted); }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
-    .dot.pulsing { animation: pulse 1.5s infinite; }
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      padding: 0 4px;
+      height: 36px;
+    }
 
-    @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 1.15rem;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+    }
 
-    /* Content Area */
-    .content-view { flex: 1; padding: 32px; overflow-y: auto; display: none; }
-    .content-view.active { display: block; }
+    .brand-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      background: var(--accent-light);
+      border: var(--border-width) solid var(--border);
+      border-radius: 8px;
+      box-shadow: 2px 2px 0px var(--border);
+      color: var(--accent);
+      shrink: 0;
+    }
 
-    /* Cards & Layout */
-    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
-    .card-title { font-size: 1rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .brand-text {
+      transition: opacity 0.15s;
+    }
 
-    /* Form Inputs & Buttons */
+    body.collapsed-sidebar .brand-text {
+      opacity: 0;
+      display: none;
+    }
+
+    .sidebar-toggle-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: #FFFFFF;
+      border: var(--border-width) solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      box-shadow: 1px 1px 0px var(--border);
+      transition: all 0.15s ease;
+      color: var(--text-main);
+    }
+    .sidebar-toggle-btn:hover {
+      background: var(--bg);
+      transform: translate(-1px, -1px);
+      box-shadow: 2px 2px 0px var(--border);
+    }
+
+    body.collapsed-sidebar .sidebar-toggle-btn i {
+      transform: rotate(180deg);
+    }
+
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      list-style: none;
+    }
+
+    .nav-item button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: var(--border-width) solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--font);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: left;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .nav-item button i {
+      width: 20px;
+      height: 20px;
+      shrink: 0;
+    }
+
+    .nav-item button:hover {
+      background: #FFFFFF;
+      border-color: var(--border);
+      color: var(--text-main);
+      box-shadow: 2px 2px 0px var(--border);
+    }
+
+    .nav-item button.active {
+      background: var(--accent-light);
+      border-color: var(--border);
+      color: var(--accent);
+      box-shadow: var(--shadow);
+      font-weight: 700;
+    }
+
+    body.collapsed-sidebar .nav-item button span {
+      display: none;
+    }
+    body.collapsed-sidebar .nav-item button {
+      justify-content: center;
+      padding: 10px 0;
+    }
+
+    /* Main Area */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    header {
+      height: 64px;
+      background: #FFFFFF;
+      border-bottom: var(--border-width) solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+    }
+
+    .header-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .network-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: #FFFFFF;
+      border: var(--border-width) solid var(--border);
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      box-shadow: 2px 2px 0px var(--border);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      border: 1px solid var(--border);
+    }
+    .dot.pulsing {
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+
+    /* Content View */
+    .content-view {
+      flex: 1;
+      padding: 28px;
+      overflow-y: auto;
+      display: none;
+    }
+    .content-view.active {
+      display: block;
+    }
+
+    /* Cards - Neobrutalist */
+    .card {
+      background: var(--card-bg);
+      border: var(--border-width) solid var(--border);
+      border-radius: 10px;
+      padding: 22px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .card-title {
+      font-size: 1rem;
+      font-weight: 800;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+
+    /* Inputs & Buttons */
     .form-group { margin-bottom: 16px; }
-    .form-group label { display: block; font-size: 0.85rem; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; }
-    .form-control { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--font); font-size: 0.9rem; color: var(--text-main); background: #FFFFFF; outline: none; transition: border 0.15s; }
-    .form-control:focus { border-color: var(--accent); }
-    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 18px; border-radius: 8px; border: none; font-family: var(--font); font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
-    .btn-primary { background: var(--accent); color: white; }
-    .btn-primary:hover { background: var(--accent-hover); }
-    .btn-danger { background: var(--red); color: white; }
-    .btn-danger:hover { background: #DC2626; }
-    .btn-secondary { background: #F1F5F9; color: var(--text-main); }
-    .btn-secondary:hover { background: #E2E8F0; }
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
 
-    /* Status Badges */
-    .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+    .form-control {
+      width: 100%;
+      padding: 10px 14px;
+      border: var(--border-width) solid var(--border);
+      border-radius: 8px;
+      font-family: var(--font);
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-main);
+      background: #FFFFFF;
+      outline: none;
+      transition: all 0.15s;
+    }
+
+    .form-control:focus {
+      box-shadow: 2px 2px 0px var(--border);
+      border-color: var(--accent);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 8px;
+      border: var(--border-width) solid var(--border);
+      font-family: var(--font);
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      transition: all 0.1s ease;
+      user-select: none;
+    }
+
+    .btn i { width: 18px; height: 18px; }
+
+    .btn:hover {
+      transform: translate(-1px, -1px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .btn:active {
+      transform: translate(2px, 2px);
+      box-shadow: var(--shadow-active);
+    }
+
+    .btn-primary { background: var(--accent); color: #FFFFFF; }
+    .btn-danger { background: var(--red); color: #FFFFFF; }
+    .btn-secondary { background: #FFFFFF; color: var(--text-main); }
+
+    /* Badges */
+    .badge {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      border: var(--border-width) solid var(--border);
+      box-shadow: 1px 1px 0px var(--border);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge i { width: 14px; height: 14px; }
     .badge-green { background: var(--green-light); color: var(--green); }
     .badge-amber { background: var(--amber-light); color: var(--amber); }
     .badge-red { background: var(--red-light); color: var(--red); }
     .badge-indigo { background: var(--accent-light); color: var(--accent); }
 
-    /* Console / Log Output */
-    .terminal { background: #0F172A; color: #E2E8F0; font-family: var(--font-mono); font-size: 0.85rem; padding: 16px; border-radius: 8px; height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
-    .terminal-line { display: flex; gap: 12px; opacity: 0.9; }
-    .terminal-line .time { color: #64748B; shrink: 0; }
+    /* Console Terminal */
+    .terminal {
+      background: #0F172A;
+      color: #F8FAFC;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      padding: 16px;
+      border-radius: 8px;
+      border: var(--border-width) solid var(--border);
+      height: 320px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .terminal-line { display: flex; gap: 12px; opacity: 0.95; }
+    .terminal-line .time { color: #64748B; shrink: 0; font-size: 0.8rem; }
     .terminal-line.info .msg { color: #38BDF8; }
-    .terminal-line.success .msg { color: #4ADE80; }
+    .terminal-line.success .msg { color: #4ADE80; font-weight: 600; }
     .terminal-line.warn .msg { color: #FBBF24; }
-    .terminal-line.error .msg { color: #F87171; }
-    .terminal-line.fire .msg { color: #C084FC; font-weight: 600; }
+    .terminal-line.error .msg { color: #F87171; font-weight: 600; }
+    .terminal-line.fire .msg { color: #C084FC; font-weight: 700; }
     .terminal-line.block .msg { color: #94A3B8; }
 
     /* Tables */
     table { width: 100%; border-collapse: collapse; text-align: left; }
-    th { padding: 10px 16px; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.05em; }
-    td { padding: 14px 16px; font-size: 0.9rem; border-bottom: 1px solid var(--border); }
+    th {
+      padding: 10px 14px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: var(--text-main);
+      border-bottom: var(--border-width) solid var(--border);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    td { padding: 14px; font-size: 0.9rem; border-bottom: 1px solid #E2E8F0; }
     tr:last-child td { border-bottom: none; }
   </style>
 </head>
 <body>
 
   <!-- Sidebar -->
-  <aside>
+  <aside id="sidebar">
     <div class="brand">
-      <span class="brand-icon">🤖</span>
-      <span>MintBot</span>
+      <div class="brand-logo">
+        <div class="brand-icon"><i data-lucide="bot"></i></div>
+        <span class="brand-text">MintBot</span>
+      </div>
+      <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Toggle Sidebar">
+        <i data-lucide="chevron-left"></i>
+      </button>
     </div>
     <ul class="nav-list">
-      <li class="nav-item"><button class="active" onclick="showTab('session')">🚀 Active Session</button></li>
-      <li class="nav-item"><button onclick="showTab('analyzer')">🔍 Analyzer</button></li>
-      <li class="nav-item"><button onclick="showTab('wallets')">👛 Wallets</button></li>
-      <li class="nav-item"><button onclick="showTab('gas')">⛽ Gas Prices</button></li>
-      <li class="nav-item"><button onclick="showTab('schedule')">📅 Schedule</button></li>
+      <li class="nav-item">
+        <button class="active" onclick="showTab('session', this)">
+          <i data-lucide="zap"></i>
+          <span>Active Session</span>
+        </button>
+      </li>
+      <li class="nav-item">
+        <button onclick="showTab('analyzer', this)">
+          <i data-lucide="search"></i>
+          <span>Analyzer</span>
+        </button>
+      </li>
+      <li class="nav-item">
+        <button onclick="showTab('wallets', this)">
+          <i data-lucide="wallet"></i>
+          <span>Wallets</span>
+        </button>
+      </li>
+      <li class="nav-item">
+        <button onclick="showTab('gas', this)">
+          <i data-lucide="gauge"></i>
+          <span>Gas Prices</span>
+        </button>
+      </li>
+      <li class="nav-item">
+        <button onclick="showTab('schedule', this)">
+          <i data-lucide="calendar"></i>
+          <span>Schedule</span>
+        </button>
+      </li>
     </ul>
   </aside>
 
-  <!-- Main Content -->
+  <!-- Main Container -->
   <main>
     <header>
       <div class="header-title" id="page-title">Active Minting Session</div>
@@ -126,7 +457,9 @@
           <span class="dot"></span>
           <span>Robinhood Chain</span>
         </div>
-        <span id="ws-status" class="badge badge-amber">Connecting WS...</span>
+        <span id="ws-status" class="badge badge-amber">
+          <i data-lucide="loader"></i> Connecting
+        </span>
       </div>
     </header>
 
@@ -134,19 +467,24 @@
     <section id="view-session" class="content-view active">
       <div class="card">
         <div class="card-title">
-          <span>Start Mint / Snipe Session</span>
-          <span id="session-badge" class="badge badge-indigo">IDLE</span>
+          <span style="display: flex; align-items: center; gap: 8px;">
+            <i data-lucide="play-circle" style="color: var(--accent);"></i>
+            Start Mint / Snipe Session
+          </span>
+          <span id="session-badge" class="badge badge-indigo">
+            <i data-lucide="circle-dot"></i> IDLE
+          </span>
         </div>
         <form id="session-form" onsubmit="handleStartSession(event)">
           <div class="grid-2">
             <div class="form-group">
-              <label>Target (OpenSea URL or 0x Address)</label>
+              <label>Target (OpenSea URL or 0x Contract)</label>
               <input type="text" id="target-input" class="form-control" placeholder="https://opensea.io/collection/..." required>
             </div>
             <div class="form-group">
               <label>Mint Mode</label>
               <select id="mode-select" class="form-control">
-                <option value="snipe">FCFS Snipe (Watch block & fire on live)</option>
+                <option value="snipe">FCFS Snipe (Watch block & fire when live)</option>
                 <option value="public">Public Mint (Fire immediately)</option>
                 <option value="whitelist">Whitelist Mint</option>
               </select>
@@ -164,27 +502,35 @@
             <div class="form-group">
               <label>Gas Strategy</label>
               <select id="gas-select" class="form-control">
-                <option value="turbo">Turbo (2.5x - Recommended)</option>
+                <option value="turbo">Turbo (2.5x - Recommended for FCFS)</option>
                 <option value="fast" selected>Fast (1.5x)</option>
                 <option value="safe">Safe (1.0x)</option>
               </select>
             </div>
           </div>
           <div style="display: flex; gap: 12px; margin-top: 8px;">
-            <button type="submit" id="btn-start" class="btn btn-primary">🚀 Start Session</button>
-            <button type="button" id="btn-stop" class="btn btn-danger" onclick="handleStopSession()" style="display: none;">🛑 Stop Session</button>
+            <button type="submit" id="btn-start" class="btn btn-primary">
+              <i data-lucide="send"></i> Start Session
+            </button>
+            <button type="button" id="btn-stop" class="btn btn-danger" onclick="handleStopSession()" style="display: none;">
+              <i data-lucide="square"></i> Stop Session
+            </button>
           </div>
         </form>
       </div>
 
-      <!-- Live Terminal Console -->
+      <!-- Console Log Terminal -->
       <div class="card">
         <div class="card-title">
-          <span>Live Output Console</span>
-          <button class="btn btn-secondary" onclick="clearConsole()" style="padding: 4px 10px; font-size: 0.75rem;">Clear</button>
+          <span style="display: flex; align-items: center; gap: 8px;">
+            <i data-lucide="terminal"></i> Live Terminal Output
+          </span>
+          <button class="btn btn-secondary" onclick="clearConsole()" style="padding: 4px 10px; font-size: 0.75rem;">
+            <i data-lucide="trash-2"></i> Clear
+          </button>
         </div>
         <div id="terminal" class="terminal">
-          <div class="terminal-line info"><span class="time">[System]</span><span class="msg">Dashboard ready. Form loaded.</span></div>
+          <div class="terminal-line info"><span class="time">[System]</span><span class="msg">Dashboard initialized. Real-time WebSocket connection ready.</span></div>
         </div>
       </div>
     </section>
@@ -192,13 +538,19 @@
     <!-- 2. ANALYZER VIEW -->
     <section id="view-analyzer" class="content-view">
       <div class="card">
-        <div class="card-title">Contract Analyzer</div>
+        <div class="card-title">
+          <span style="display: flex; align-items: center; gap: 8px;">
+            <i data-lucide="search"></i> Contract Analyzer
+          </span>
+        </div>
         <form onsubmit="handleAnalyze(event)">
           <div class="form-group">
             <label>OpenSea URL or Contract Address</label>
             <input type="text" id="analyze-input" class="form-control" placeholder="https://opensea.io/collection/..." required>
           </div>
-          <button type="submit" class="btn btn-primary">🔍 Analyze Contract</button>
+          <button type="submit" class="btn btn-primary">
+            <i data-lucide="cpu"></i> Analyze Contract
+          </button>
         </form>
       </div>
       <div id="analyze-result" class="card" style="display: none;">
@@ -210,13 +562,19 @@
     <!-- 3. WALLETS VIEW -->
     <section id="view-wallets" class="content-view">
       <div class="card">
-        <div class="card-title">Add Wallet</div>
+        <div class="card-title">
+          <span style="display: flex; align-items: center; gap: 8px;">
+            <i data-lucide="key-round"></i> Add Wallet
+          </span>
+        </div>
         <form onsubmit="handleAddWallet(event)">
           <div class="form-group">
             <label>Private Key (0x...)</label>
             <input type="password" id="key-input" class="form-control" placeholder="0x..." required>
           </div>
-          <button type="submit" class="btn btn-primary">➕ Add Wallet</button>
+          <button type="submit" class="btn btn-primary">
+            <i data-lucide="plus-circle"></i> Add Wallet
+          </button>
         </form>
       </div>
       <div class="card">
@@ -240,20 +598,26 @@
     <!-- 4. GAS VIEW -->
     <section id="view-gas" class="content-view">
       <div class="card">
-        <div class="card-title">Gas Prices — Robinhood Chain</div>
-        <button class="btn btn-secondary" onclick="loadGasPrices()" style="margin-bottom: 16px;">🔄 Refresh Gas Prices</button>
+        <div class="card-title">
+          <span style="display: flex; align-items: center; gap: 8px;">
+            <i data-lucide="gauge"></i> Gas Prices — Robinhood Chain
+          </span>
+          <button class="btn btn-secondary" onclick="loadGasPrices()" style="padding: 6px 12px; font-size: 0.8rem;">
+            <i data-lucide="refresh-cw"></i> Refresh
+          </button>
+        </div>
         <div class="grid-3" id="gas-cards">
           <div class="card" style="margin-bottom: 0;">
-            <div style="font-size: 0.85rem; color: var(--text-muted);">Safe Strategy</div>
-            <div id="gas-safe" style="font-size: 1.5rem; font-weight: 700; margin-top: 8px;">-- Gwei</div>
+            <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Safe Strategy</div>
+            <div id="gas-safe" style="font-size: 1.6rem; font-weight: 800; margin-top: 8px;">-- Gwei</div>
           </div>
           <div class="card" style="margin-bottom: 0;">
-            <div style="font-size: 0.85rem; color: var(--text-muted);">Fast Strategy</div>
-            <div id="gas-fast" style="font-size: 1.5rem; font-weight: 700; margin-top: 8px; color: var(--accent);">-- Gwei</div>
+            <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Fast Strategy</div>
+            <div id="gas-fast" style="font-size: 1.6rem; font-weight: 800; margin-top: 8px; color: var(--accent);">-- Gwei</div>
           </div>
           <div class="card" style="margin-bottom: 0;">
-            <div style="font-size: 0.85rem; color: var(--text-muted);">Turbo Strategy</div>
-            <div id="gas-turbo" style="font-size: 1.5rem; font-weight: 700; margin-top: 8px; color: var(--green);">-- Gwei</div>
+            <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Turbo Strategy</div>
+            <div id="gas-turbo" style="font-size: 1.6rem; font-weight: 800; margin-top: 8px; color: var(--green);">-- Gwei</div>
           </div>
         </div>
       </div>
@@ -262,7 +626,11 @@
     <!-- 5. SCHEDULE VIEW -->
     <section id="view-schedule" class="content-view">
       <div class="card">
-        <div class="card-title">Schedule Mint</div>
+        <div class="card-title">
+          <span style="display: flex; align-items: center; gap: 8px;">
+            <i data-lucide="calendar"></i> Schedule Mint
+          </span>
+        </div>
         <form onsubmit="handleSchedule(event)">
           <div class="form-group">
             <label>Target (OpenSea URL or 0x Address)</label>
@@ -278,7 +646,9 @@
               <input type="number" id="sched-qty" class="form-control" value="1" min="1">
             </div>
           </div>
-          <button type="submit" class="btn btn-primary">📅 Schedule Mint</button>
+          <button type="submit" class="btn btn-primary">
+            <i data-lucide="clock"></i> Schedule Mint
+          </button>
         </form>
       </div>
     </section>
@@ -296,13 +666,15 @@
       ws.onopen = () => {
         const el = document.getElementById('ws-status');
         el.className = 'badge badge-green';
-        el.innerText = 'WS Connected';
+        el.innerHTML = `<i data-lucide="check-circle-2"></i> Connected`;
+        lucide.createIcons();
       };
 
       ws.onclose = () => {
         const el = document.getElementById('ws-status');
         el.className = 'badge badge-red';
-        el.innerText = 'WS Disconnected';
+        el.innerHTML = `<i data-lucide="x-circle"></i> Disconnected`;
+        lucide.createIcons();
         setTimeout(initWS, 3000);
       };
 
@@ -318,7 +690,11 @@
       };
     }
 
-    function showTab(tabName) {
+    function toggleSidebar() {
+      document.body.classList.toggle('collapsed-sidebar');
+    }
+
+    function showTab(tabName, btnEl) {
       document.querySelectorAll('.nav-item button').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.content-view').forEach(v => v.classList.remove('active'));
 
@@ -332,7 +708,7 @@
 
       document.getElementById(`view-${tabName}`).classList.add('active');
       document.getElementById('page-title').innerText = titles[tabName] || 'Dashboard';
-      event.target.classList.add('active');
+      if (btnEl) btnEl.classList.add('active');
 
       if (tabName === 'wallets') fetchWallets();
       if (tabName === 'gas') loadGasPrices();
@@ -363,15 +739,16 @@
 
       if (session.status === 'running') {
         badge.className = 'badge badge-amber';
-        badge.innerText = `RUNNING (${session.mode?.toUpperCase()})`;
+        badge.innerHTML = `<i data-lucide="loader"></i> RUNNING (${session.mode?.toUpperCase()})`;
         startBtn.style.display = 'none';
         stopBtn.style.display = 'inline-flex';
       } else {
         badge.className = 'badge badge-indigo';
-        badge.innerText = session.status.toUpperCase();
+        badge.innerHTML = `<i data-lucide="circle-dot"></i> ${session.status.toUpperCase()}`;
         startBtn.style.display = 'inline-flex';
         stopBtn.style.display = 'none';
       }
+      lucide.createIcons();
     }
 
     async function handleStartSession(e) {
@@ -427,12 +804,12 @@
         const a = data.analysis;
         resDiv.style.display = 'block';
         details.innerHTML = `
-          <p><strong>Contract:</strong> ${a.contractAddress}</p>
+          <p><strong>Contract:</strong> <code>${a.contractAddress}</code></p>
           <p><strong>Verified:</strong> ${a.isVerified ? '✓ Yes' : '✗ No'}</p>
-          <p><strong>Sale Status:</strong> ${a.saleActive ? '🟢 Active' : '🔴 Inactive'}</p>
-          <p><strong>Price:</strong> ${a.mintPriceEth ? a.mintPriceEth + ' ETH' : 'Unknown'}</p>
+          <p><strong>Sale Status:</strong> ${a.saleActive ? '<span class="badge badge-green">ACTIVE</span>' : '<span class="badge badge-red">INACTIVE</span>'}</p>
+          <p><strong>Price:</strong> ${a.mintPriceEth ? a.mintPriceEth + ' ETH' : 'Unknown / Check Launchpad'}</p>
           <p><strong>WL Type:</strong> ${a.wlType}</p>
-          <p><strong>Mint Function:</strong> ${a.detectedMintFn || 'None detected'}</p>
+          <p><strong>Recommended Mint Fn:</strong> <code>${a.detectedMintFn || 'None detected'}</code></p>
         `;
       } catch (err) {
         alert(err);
@@ -445,20 +822,25 @@
         const res = await fetch(`${API}/wallets`);
         const data = await res.json();
         if (data.wallets.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="4">No wallets configured. Add one above.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="4" style="color: var(--text-muted);">No wallets configured. Add one above.</td></tr>';
           return;
         }
 
         tbody.innerHTML = data.wallets.map(w => `
           <tr>
-            <td>Wallet ${w.index}</td>
+            <td><strong>Wallet ${w.index}</strong></td>
             <td><code>${w.address}</code></td>
             <td><strong>${w.balanceEth} ETH</strong></td>
-            <td><button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75rem;" onclick="removeWallet(${w.index})">Remove</button></td>
+            <td>
+              <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.75rem;" onclick="removeWallet(${w.index})">
+                <i data-lucide="trash-2"></i> Remove
+              </button>
+            </td>
           </tr>
         `).join('');
+        lucide.createIcons();
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="4">Failed to load wallets.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" style="color: var(--red);">Failed to load wallets.</td></tr>';
       }
     }
 
@@ -474,7 +856,7 @@
         const data = await res.json();
         if (!res.ok) alert(data.error);
         else {
-          alert(`✅ Wallet Added!\nAddress: ${data.address}`);
+          alert(`Wallet Added!\nAddress: ${data.address}`);
           document.getElementById('key-input').value = '';
           fetchWallets();
         }
@@ -514,13 +896,14 @@
         });
         const data = await res.json();
         if (!res.ok) alert(data.error);
-        else showTab('session');
+        else showTab('session', document.querySelector('.nav-item button'));
       } catch (err) { alert(err); }
     }
 
     window.onload = () => {
       initWS();
       fetchWallets();
+      lucide.createIcons();
     };
   </script>
 </body>
