@@ -14,6 +14,8 @@ export interface SnipeMintOptions {
   priceEth: string
   gasStrategy: GasStrategy
   customGasPriceGwei?: number
+  /** Optional signal to abort the snipe (used by dashboard server) */
+  signal?: AbortSignal
 }
 
 /**
@@ -21,8 +23,8 @@ export interface SnipeMintOptions {
  * Monitors the contract every block via WebSocket.
  * The moment the sale goes live, fires all wallets simultaneously.
  *
- * This is how you beat manual minters: they're still loading the website
- * while the bot already submitted the transaction.
+ * Supports an optional AbortSignal for programmatic cancellation
+ * from the dashboard server without killing the process.
  */
 export async function runSnipeMint(opts: SnipeMintOptions): Promise<void> {
   logger.banner()
@@ -40,7 +42,6 @@ export async function runSnipeMint(opts: SnipeMintOptions): Promise<void> {
   const totalCostEth = (parseFloat(opts.priceEth) * opts.quantity).toString()
   const totalCostWei = parseEther(totalCostEth)
 
-  // Pre-load balances before the snipe starts
   const wallets = await loadBalances()
   const solvent = filterSolventWallets(wallets, totalCostWei)
 
@@ -58,52 +59,71 @@ export async function runSnipeMint(opts: SnipeMintOptions): Promise<void> {
   const sigKey = `${opts.functionName}(uint256)`
   const resolvedAbi: Abi = opts.abi ?? [COMMON_MINT_ABIS[sigKey] ?? COMMON_MINT_ABIS['mint(uint256)']]
 
-  // Set up the snipe callback — called instantly when sale goes live
-  let unwatch: (() => void) | undefined
+  return new Promise<void>((resolve, reject) => {
+    let unwatch: (() => void) | undefined
+    let settled = false
 
-  const onLive = async (): Promise<void> => {
-    // Stop watching blocks — we don't need this anymore
-    if (unwatch) unwatch()
+    const finish = (err?: Error) => {
+      if (settled) return
+      settled = true
+      if (unwatch) unwatch()
+      if (err) reject(err)
+      else resolve()
+    }
 
-    // Fetch fresh nonces at fire time
-    const nonces = await Promise.all(solvent.map((w) => getNonce(w.address)))
-
-    const results = await executeParallelMint(publicClient, solvent, {
-      contractAddress: opts.contractAddress,
-      abi: resolvedAbi,
-      functionName: opts.functionName,
-      args: [BigInt(opts.quantity)],
-      valueEth: totalCostEth,
-      gasStrategy: opts.gasStrategy,
-      customGasPriceGwei: opts.customGasPriceGwei,
-    }, nonces)
-
-    logger.divider()
-    let successCount = 0
-    for (const r of results) {
-      if (r.hash) {
-        logger.success(`Wallet ${r.wallet.index} ✓  ${r.hash}`)
-        successCount++
-      } else {
-        logger.error(`Wallet ${r.wallet.index} ✗  ${r.error}`)
+    // Handle abort signal (from dashboard "Stop" button)
+    if (opts.signal) {
+      opts.signal.addEventListener('abort', () => {
+        logger.warn('Snipe stopped by user.')
+        finish()
+      })
+      if (opts.signal.aborted) {
+        finish()
+        return
       }
     }
-    logger.divider()
-    logger.info(`Done: ${successCount}/${results.length} wallets succeeded`)
 
-    // Exit cleanly after mint
-    process.exit(0)
-  }
+    // Handle Ctrl+C in CLI mode
+    if (!opts.signal) {
+      process.once('SIGINT', () => {
+        logger.warn('\nInterrupted — stopping snipe.')
+        finish()
+        process.exit(0)
+      })
+    }
 
-  // Start watching — this blocks until the sale goes live
-  unwatch = watchForSaleActive(wsClient, publicClient, opts.contractAddress, onLive)
+    const onLive = async (): Promise<void> => {
+      try {
+        const nonces = await Promise.all(solvent.map((w) => getNonce(w.address)))
 
-  // Keep the process alive
-  await new Promise<void>(() => {
-    process.on('SIGINT', () => {
-      logger.warn('\nInterrupted — stopping snipe.')
-      if (unwatch) unwatch()
-      process.exit(0)
-    })
+        const results = await executeParallelMint(publicClient, solvent, {
+          contractAddress: opts.contractAddress,
+          abi: resolvedAbi,
+          functionName: opts.functionName,
+          args: [BigInt(opts.quantity)],
+          valueEth: totalCostEth,
+          gasStrategy: opts.gasStrategy,
+          customGasPriceGwei: opts.customGasPriceGwei,
+        }, nonces)
+
+        logger.divider()
+        let successCount = 0
+        for (const r of results) {
+          if (r.hash) {
+            logger.success(`Wallet ${r.wallet.index} ✓  ${r.hash}`)
+            successCount++
+          } else {
+            logger.error(`Wallet ${r.wallet.index} ✗  ${r.error}`)
+          }
+        }
+        logger.divider()
+        logger.info(`Done: ${successCount}/${results.length} wallets succeeded`)
+        finish()
+      } catch (err) {
+        finish(err instanceof Error ? err : new Error(String(err)))
+      }
+    }
+
+    unwatch = watchForSaleActive(wsClient, publicClient, opts.contractAddress, onLive)
   })
 }

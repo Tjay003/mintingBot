@@ -21,6 +21,21 @@ program
   .description(chalk.bold('🤖 MintBot') + chalk.dim(' — High-performance NFT minting bot for Robinhood Chain'))
   .version('1.0.0')
 
+// ─── ui ───────────────────────────────────────────────────────────────────────
+
+program
+  .command('ui')
+  .description('Launch the Web Dashboard control panel in your browser (http://localhost:3000)')
+  .action(async () => {
+    try {
+      const { startServer } = await import('../server/index.js')
+      await startServer()
+    } catch (err) {
+      logger.error(String(err))
+      process.exit(1)
+    }
+  })
+
 // ─── analyze ─────────────────────────────────────────────────────────────────
 
 program

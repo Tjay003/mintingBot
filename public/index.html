@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MintBot Dashboard — Robinhood Chain</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --border: #E2E8F0;
+      --text-main: #0F172A;
+      --text-muted: #64748B;
+      --accent: #4F46E5;
+      --accent-hover: #4338CA;
+      --accent-light: #EEF2FF;
+      --green: #10B981;
+      --green-light: #ECFDF5;
+      --amber: #F59E0B;
+      --amber-light: #FFFBEB;
+      --red: #EF4444;
+      --red-light: #FEF2F2;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); background: var(--bg); color: var(--text-main); height: 100vh; display: flex; overflow: hidden; }
+
+    /* Sidebar */
+    aside { width: 240px; background: #FFFFFF; border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 24px 16px; shrink: 0; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.15rem; color: var(--text-main); margin-bottom: 32px; padding-left: 8px; }
+    .brand-icon { font-size: 1.4rem; }
+    .nav-list { display: flex; flex-direction: column; gap: 4px; list-style: none; }
+    .nav-item button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; border: none; background: transparent; color: var(--text-muted); font-family: var(--font); font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.15s ease; text-align: left; }
+    .nav-item button:hover { background: var(--bg); color: var(--text-main); }
+    .nav-item button.active { background: var(--accent-light); color: var(--accent); font-weight: 600; }
+
+    /* Main Container */
+    main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Top Bar */
+    header { height: 64px; background: #FFFFFF; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; }
+    .header-title { font-size: 1.1rem; font-weight: 600; }
+    .header-status { display: flex; align-items: center; gap: 16px; font-size: 0.85rem; }
+    .network-badge { display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: #F1F5F9; border-radius: 20px; font-weight: 500; color: var(--text-muted); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+    .dot.pulsing { animation: pulse 1.5s infinite; }
+
+    @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
+
+    /* Content Area */
+    .content-view { flex: 1; padding: 32px; overflow-y: auto; display: none; }
+    .content-view.active { display: block; }
+
+    /* Cards & Layout */
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+    .card-title { font-size: 1rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+    /* Form Inputs & Buttons */
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 0.85rem; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; }
+    .form-control { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-family: var(--font); font-size: 0.9rem; color: var(--text-main); background: #FFFFFF; outline: none; transition: border 0.15s; }
+    .form-control:focus { border-color: var(--accent); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 18px; border-radius: 8px; border: none; font-family: var(--font); font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-danger { background: var(--red); color: white; }
+    .btn-danger:hover { background: #DC2626; }
+    .btn-secondary { background: #F1F5F9; color: var(--text-main); }
+    .btn-secondary:hover { background: #E2E8F0; }
+
+    /* Status Badges */
+    .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+    .badge-green { background: var(--green-light); color: var(--green); }
+    .badge-amber { background: var(--amber-light); color: var(--amber); }
+    .badge-red { background: var(--red-light); color: var(--red); }
+    .badge-indigo { background: var(--accent-light); color: var(--accent); }
+
+    /* Console / Log Output */
+    .terminal { background: #0F172A; color: #E2E8F0; font-family: var(--font-mono); font-size: 0.85rem; padding: 16px; border-radius: 8px; height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+    .terminal-line { display: flex; gap: 12px; opacity: 0.9; }
+    .terminal-line .time { color: #64748B; shrink: 0; }
+    .terminal-line.info .msg { color: #38BDF8; }
+    .terminal-line.success .msg { color: #4ADE80; }
+    .terminal-line.warn .msg { color: #FBBF24; }
+    .terminal-line.error .msg { color: #F87171; }
+    .terminal-line.fire .msg { color: #C084FC; font-weight: 600; }
+    .terminal-line.block .msg { color: #94A3B8; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th { padding: 10px 16px; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.05em; }
+    td { padding: 14px 16px; font-size: 0.9rem; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside>
+    <div class="brand">
+      <span class="brand-icon">🤖</span>
+      <span>MintBot</span>
+    </div>
+    <ul class="nav-list">
+      <li class="nav-item"><button class="active" onclick="showTab('session')">🚀 Active Session</button></li>
+      <li class="nav-item"><button onclick="showTab('analyzer')">🔍 Analyzer</button></li>
+      <li class="nav-item"><button onclick="showTab('wallets')">👛 Wallets</button></li>
+      <li class="nav-item"><button onclick="showTab('gas')">⛽ Gas Prices</button></li>
+      <li class="nav-item"><button onclick="showTab('schedule')">📅 Schedule</button></li>
+    </ul>
+  </aside>
+
+  <!-- Main Content -->
+  <main>
+    <header>
+      <div class="header-title" id="page-title">Active Minting Session</div>
+      <div class="header-status">
+        <div class="network-badge">
+          <span class="dot"></span>
+          <span>Robinhood Chain</span>
+        </div>
+        <span id="ws-status" class="badge badge-amber">Connecting WS...</span>
+      </div>
+    </header>
+
+    <!-- 1. SESSION VIEW -->
+    <section id="view-session" class="content-view active">
+      <div class="card">
+        <div class="card-title">
+          <span>Start Mint / Snipe Session</span>
+          <span id="session-badge" class="badge badge-indigo">IDLE</span>
+        </div>
+        <form id="session-form" onsubmit="handleStartSession(event)">
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Target (OpenSea URL or 0x Address)</label>
+              <input type="text" id="target-input" class="form-control" placeholder="https://opensea.io/collection/..." required>
+            </div>
+            <div class="form-group">
+              <label>Mint Mode</label>
+              <select id="mode-select" class="form-control">
+                <option value="snipe">FCFS Snipe (Watch block & fire on live)</option>
+                <option value="public">Public Mint (Fire immediately)</option>
+                <option value="whitelist">Whitelist Mint</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid-3">
+            <div class="form-group">
+              <label>Quantity / Wallet</label>
+              <input type="number" id="qty-input" class="form-control" value="1" min="1">
+            </div>
+            <div class="form-group">
+              <label>Price (ETH)</label>
+              <input type="text" id="price-input" class="form-control" value="0">
+            </div>
+            <div class="form-group">
+              <label>Gas Strategy</label>
+              <select id="gas-select" class="form-control">
+                <option value="turbo">Turbo (2.5x - Recommended)</option>
+                <option value="fast" selected>Fast (1.5x)</option>
+                <option value="safe">Safe (1.0x)</option>
+              </select>
+            </div>
+          </div>
+          <div style="display: flex; gap: 12px; margin-top: 8px;">
+            <button type="submit" id="btn-start" class="btn btn-primary">🚀 Start Session</button>
+            <button type="button" id="btn-stop" class="btn btn-danger" onclick="handleStopSession()" style="display: none;">🛑 Stop Session</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Live Terminal Console -->
+      <div class="card">
+        <div class="card-title">
+          <span>Live Output Console</span>
+          <button class="btn btn-secondary" onclick="clearConsole()" style="padding: 4px 10px; font-size: 0.75rem;">Clear</button>
+        </div>
+        <div id="terminal" class="terminal">
+          <div class="terminal-line info"><span class="time">[System]</span><span class="msg">Dashboard ready. Form loaded.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. ANALYZER VIEW -->
+    <section id="view-analyzer" class="content-view">
+      <div class="card">
+        <div class="card-title">Contract Analyzer</div>
+        <form onsubmit="handleAnalyze(event)">
+          <div class="form-group">
+            <label>OpenSea URL or Contract Address</label>
+            <input type="text" id="analyze-input" class="form-control" placeholder="https://opensea.io/collection/..." required>
+          </div>
+          <button type="submit" class="btn btn-primary">🔍 Analyze Contract</button>
+        </form>
+      </div>
+      <div id="analyze-result" class="card" style="display: none;">
+        <div class="card-title">Analysis Results</div>
+        <div id="analyze-details"></div>
+      </div>
+    </section>
+
+    <!-- 3. WALLETS VIEW -->
+    <section id="view-wallets" class="content-view">
+      <div class="card">
+        <div class="card-title">Add Wallet</div>
+        <form onsubmit="handleAddWallet(event)">
+          <div class="form-group">
+            <label>Private Key (0x...)</label>
+            <input type="password" id="key-input" class="form-control" placeholder="0x..." required>
+          </div>
+          <button type="submit" class="btn btn-primary">➕ Add Wallet</button>
+        </form>
+      </div>
+      <div class="card">
+        <div class="card-title">Configured Wallets</div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Address</th>
+              <th>ETH Balance</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="wallets-tbody">
+            <tr><td colspan="4" style="color: var(--text-muted);">Loading wallets...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 4. GAS VIEW -->
+    <section id="view-gas" class="content-view">
+      <div class="card">
+        <div class="card-title">Gas Prices — Robinhood Chain</div>
+        <button class="btn btn-secondary" onclick="loadGasPrices()" style="margin-bottom: 16px;">🔄 Refresh Gas Prices</button>
+        <div class="grid-3" id="gas-cards">
+          <div class="card" style="margin-bottom: 0;">
+            <div style="font-size: 0.85rem; color: var(--text-muted);">Safe Strategy</div>
+            <div id="gas-safe" style="font-size: 1.5rem; font-weight: 700; margin-top: 8px;">-- Gwei</div>
+          </div>
+          <div class="card" style="margin-bottom: 0;">
+            <div style="font-size: 0.85rem; color: var(--text-muted);">Fast Strategy</div>
+            <div id="gas-fast" style="font-size: 1.5rem; font-weight: 700; margin-top: 8px; color: var(--accent);">-- Gwei</div>
+          </div>
+          <div class="card" style="margin-bottom: 0;">
+            <div style="font-size: 0.85rem; color: var(--text-muted);">Turbo Strategy</div>
+            <div id="gas-turbo" style="font-size: 1.5rem; font-weight: 700; margin-top: 8px; color: var(--green);">-- Gwei</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. SCHEDULE VIEW -->
+    <section id="view-schedule" class="content-view">
+      <div class="card">
+        <div class="card-title">Schedule Mint</div>
+        <form onsubmit="handleSchedule(event)">
+          <div class="form-group">
+            <label>Target (OpenSea URL or 0x Address)</label>
+            <input type="text" id="sched-target" class="form-control" placeholder="https://opensea.io/collection/..." required>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Mint Date & Time (Local)</label>
+              <input type="datetime-local" id="sched-time" class="form-control" required>
+            </div>
+            <div class="form-group">
+              <label>Quantity / Wallet</label>
+              <input type="number" id="sched-qty" class="form-control" value="1" min="1">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary">📅 Schedule Mint</button>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    const API = 'http://localhost:3000/api';
+    let ws;
+
+    function initWS() {
+      const wsUrl = `ws://${location.host}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        const el = document.getElementById('ws-status');
+        el.className = 'badge badge-green';
+        el.innerText = 'WS Connected';
+      };
+
+      ws.onclose = () => {
+        const el = document.getElementById('ws-status');
+        el.className = 'badge badge-red';
+        el.innerText = 'WS Disconnected';
+        setTimeout(initWS, 3000);
+      };
+
+      ws.onmessage = (evt) => {
+        try {
+          const data = JSON.parse(evt.data);
+          if (data.type === 'log') {
+            appendTerminal(data.level, data.message, data.timestamp);
+          } else if (data.type === 'session') {
+            updateSessionUI(data);
+          }
+        } catch (e) {}
+      };
+    }
+
+    function showTab(tabName) {
+      document.querySelectorAll('.nav-item button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.content-view').forEach(v => v.classList.remove('active'));
+
+      const titles = {
+        session: 'Active Minting Session',
+        analyzer: 'Contract Analyzer',
+        wallets: 'Wallet Management',
+        gas: 'Gas Price Dashboard',
+        schedule: 'Schedule Mint'
+      };
+
+      document.getElementById(`view-${tabName}`).classList.add('active');
+      document.getElementById('page-title').innerText = titles[tabName] || 'Dashboard';
+      event.target.classList.add('active');
+
+      if (tabName === 'wallets') fetchWallets();
+      if (tabName === 'gas') loadGasPrices();
+    }
+
+    function appendTerminal(level, message, timeStr) {
+      const term = document.getElementById('terminal');
+      const time = timeStr ? new Date(timeStr).toLocaleTimeString() : new Date().toLocaleTimeString();
+      const div = document.createElement('div');
+      div.className = `terminal-line ${level}`;
+      div.innerHTML = `<span class="time">[${time}]</span><span class="msg">${escapeHtml(message)}</span>`;
+      term.appendChild(div);
+      term.scrollTop = term.scrollHeight;
+    }
+
+    function clearConsole() {
+      document.getElementById('terminal').innerHTML = '';
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function updateSessionUI(session) {
+      const badge = document.getElementById('session-badge');
+      const startBtn = document.getElementById('btn-start');
+      const stopBtn = document.getElementById('btn-stop');
+
+      if (session.status === 'running') {
+        badge.className = 'badge badge-amber';
+        badge.innerText = `RUNNING (${session.mode?.toUpperCase()})`;
+        startBtn.style.display = 'none';
+        stopBtn.style.display = 'inline-flex';
+      } else {
+        badge.className = 'badge badge-indigo';
+        badge.innerText = session.status.toUpperCase();
+        startBtn.style.display = 'inline-flex';
+        stopBtn.style.display = 'none';
+      }
+    }
+
+    async function handleStartSession(e) {
+      e.preventDefault();
+      const payload = {
+        target: document.getElementById('target-input').value,
+        mode: document.getElementById('mode-select').value,
+        quantity: parseInt(document.getElementById('qty-input').value, 10),
+        priceEth: document.getElementById('price-input').value,
+        gasStrategy: document.getElementById('gas-select').value,
+      };
+
+      try {
+        const res = await fetch(`${API}/session/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) alert(data.error);
+      } catch (err) {
+        alert(err);
+      }
+    }
+
+    async function handleStopSession() {
+      try {
+        await fetch(`${API}/session/stop`, { method: 'POST' });
+      } catch (err) {
+        alert(err);
+      }
+    }
+
+    async function handleAnalyze(e) {
+      e.preventDefault();
+      const target = document.getElementById('analyze-input').value;
+      const resDiv = document.getElementById('analyze-result');
+      const details = document.getElementById('analyze-details');
+
+      try {
+        const res = await fetch(`${API}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          alert(data.error);
+          return;
+        }
+
+        const a = data.analysis;
+        resDiv.style.display = 'block';
+        details.innerHTML = `
+          <p><strong>Contract:</strong> ${a.contractAddress}</p>
+          <p><strong>Verified:</strong> ${a.isVerified ? '✓ Yes' : '✗ No'}</p>
+          <p><strong>Sale Status:</strong> ${a.saleActive ? '🟢 Active' : '🔴 Inactive'}</p>
+          <p><strong>Price:</strong> ${a.mintPriceEth ? a.mintPriceEth + ' ETH' : 'Unknown'}</p>
+          <p><strong>WL Type:</strong> ${a.wlType}</p>
+          <p><strong>Mint Function:</strong> ${a.detectedMintFn || 'None detected'}</p>
+        `;
+      } catch (err) {
+        alert(err);
+      }
+    }
+
+    async function fetchWallets() {
+      const tbody = document.getElementById('wallets-tbody');
+      try {
+        const res = await fetch(`${API}/wallets`);
+        const data = await res.json();
+        if (data.wallets.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4">No wallets configured. Add one above.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.wallets.map(w => `
+          <tr>
+            <td>Wallet ${w.index}</td>
+            <td><code>${w.address}</code></td>
+            <td><strong>${w.balanceEth} ETH</strong></td>
+            <td><button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75rem;" onclick="removeWallet(${w.index})">Remove</button></td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="4">Failed to load wallets.</td></tr>';
+      }
+    }
+
+    async function handleAddWallet(e) {
+      e.preventDefault();
+      const privateKey = document.getElementById('key-input').value;
+      try {
+        const res = await fetch(`${API}/wallets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ privateKey })
+        });
+        const data = await res.json();
+        if (!res.ok) alert(data.error);
+        else {
+          document.getElementById('key-input').value = '';
+          fetchWallets();
+        }
+      } catch (err) { alert(err); }
+    }
+
+    async function removeWallet(idx) {
+      if (!confirm(`Remove Wallet ${idx}?`)) return;
+      try {
+        await fetch(`${API}/wallets/${idx}`, { method: 'DELETE' });
+        fetchWallets();
+      } catch (err) { alert(err); }
+    }
+
+    async function loadGasPrices() {
+      try {
+        const res = await fetch(`${API}/gas`);
+        const data = await res.json();
+        document.getElementById('gas-safe').innerText = `${data.strategies.safe} Gwei`;
+        document.getElementById('gas-fast').innerText = `${data.strategies.fast} Gwei`;
+        document.getElementById('gas-turbo').innerText = `${data.strategies.turbo} Gwei`;
+      } catch (err) {}
+    }
+
+    async function handleSchedule(e) {
+      e.preventDefault();
+      const target = document.getElementById('sched-target').value;
+      const timeStr = document.getElementById('sched-time').value;
+      const quantity = parseInt(document.getElementById('sched-qty').value, 10);
+      const isoTime = new Date(timeStr).toISOString();
+
+      try {
+        const res = await fetch(`${API}/session/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'scheduled', target, quantity, mintTime: isoTime })
+        });
+        const data = await res.json();
+        if (!res.ok) alert(data.error);
+        else showTab('session');
+      } catch (err) { alert(err); }
+    }
+
+    window.onload = () => {
+      initWS();
+    };
+  </script>
+</body>
+</html>
