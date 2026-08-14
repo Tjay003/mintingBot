@@ -100,10 +100,14 @@ export function watchForSaleActive(
  * Sleep until a specific future timestamp, logging a countdown.
  * Used for scheduled mints where we know the exact start time.
  */
-export async function sleepUntil(targetTime: Date): Promise<void> {
+export async function sleepUntil(targetTime: Date, signal?: AbortSignal): Promise<void> {
   const now = Date.now()
   const target = targetTime.getTime()
   const diff = target - now
+
+  if (signal?.aborted) {
+    throw new Error('Scheduled mint aborted before start')
+  }
 
   if (diff <= 0) {
     logger.warn('Target time is in the past — firing immediately')
@@ -112,17 +116,50 @@ export async function sleepUntil(targetTime: Date): Promise<void> {
 
   logger.info(`Scheduled mint in ${Math.ceil(diff / 1000)}s  (at ${targetTime.toLocaleTimeString()})`)
 
-  // Countdown every second until 10 seconds before
+  // Sleep in intervals with periodic progress logs until 10 seconds before
   if (diff > 10_000) {
-    await new Promise<void>((resolve) => setTimeout(resolve, diff - 10_000))
+    const endSleep = target - 10_000
+    let lastLogSec = Math.ceil((target - Date.now()) / 1000)
+
+    while (Date.now() < endSleep) {
+      if (signal?.aborted) {
+        throw new Error('Scheduled mint stopped by user.')
+      }
+      const remainingSec = Math.ceil((target - Date.now()) / 1000)
+      if (remainingSec <= lastLogSec - 60 || (remainingSec <= 30 && remainingSec !== lastLogSec)) {
+        logger.info(`⏳ Countdown: ${remainingSec}s remaining until scheduled mint...`)
+        lastLogSec = remainingSec
+      }
+      const step = Math.min(1000, endSleep - Date.now())
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(resolve, step)
+        if (signal) {
+          signal.addEventListener('abort', () => {
+            clearTimeout(timeout)
+            reject(new Error('Scheduled mint stopped by user.'))
+          }, { once: true })
+        }
+      })
+    }
     logger.info(`10 seconds to mint time — standby...`)
   }
 
   // Rapid poll the last 10 seconds
   while (Date.now() < target - 500) {
+    if (signal?.aborted) {
+      throw new Error('Scheduled mint stopped by user.')
+    }
     const remaining = ((target - Date.now()) / 1000).toFixed(1)
     process.stdout.write(`\r  ⏳  ${remaining}s remaining...`)
-    await new Promise<void>((resolve) => setTimeout(resolve, 100))
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(resolve, 100)
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          clearTimeout(timeout)
+          reject(new Error('Scheduled mint stopped by user.'))
+        }, { once: true })
+      }
+    })
   }
 
   process.stdout.write('\n')

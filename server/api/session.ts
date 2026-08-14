@@ -23,6 +23,11 @@ router.get('/', (_req, res) => {
     blocksChecked: session.blocksChecked,
     saleActive: session.saleActive,
     error: session.error,
+    quantity: session.quantity,
+    priceEth: session.priceEth,
+    gasStrategy: session.gasStrategy,
+    mintTime: session.mintTime,
+    selectedWallets: session.selectedWallets,
   })
 })
 
@@ -81,6 +86,11 @@ router.post('/start', async (req, res) => {
       saleActive: null,
       error: undefined,
       abortController,
+      quantity: Number(quantity),
+      priceEth,
+      gasStrategy,
+      mintTime,
+      selectedWallets,
     })
 
     res.json({ success: true, message: `Session started (${mode})`, target: resolved.contractAddress })
@@ -141,6 +151,7 @@ router.post('/start', async (req, res) => {
             gasStrategy,
             customGasPriceGwei,
             walletIndices: selectedWallets,
+            signal: abortController.signal,
           })
         }
 

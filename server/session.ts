@@ -13,8 +13,13 @@ export interface SessionState {
   error?: string
   blocksChecked: number
   saleActive: boolean | null
-  /** AbortController for stopping a running snipe */
+  /** AbortController for stopping a running session */
   abortController?: AbortController
+  quantity?: number
+  priceEth?: string
+  gasStrategy?: string
+  mintTime?: string
+  selectedWallets?: number[]
 }
 
 const state: SessionState = {
@@ -33,8 +38,15 @@ export function setSession(patch: Partial<SessionState>): void {
     status: state.status,
     mode: state.mode,
     target: state.target,
+    contractAddress: state.contractAddress,
     blockCount: state.blocksChecked,
     saleActive: state.saleActive,
+    quantity: state.quantity,
+    priceEth: state.priceEth,
+    gasStrategy: state.gasStrategy,
+    mintTime: state.mintTime,
+    selectedWallets: state.selectedWallets,
+    error: state.error,
   })
 }
 
@@ -49,6 +61,11 @@ export function resetSession(): void {
   state.blocksChecked = 0
   state.saleActive = null
   state.abortController = undefined
+  state.quantity = undefined
+  state.priceEth = undefined
+  state.gasStrategy = undefined
+  state.mintTime = undefined
+  state.selectedWallets = undefined
   broadcastSession({ status: 'idle' })
 }
 

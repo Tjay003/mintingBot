@@ -17,6 +17,8 @@ export interface ScheduledMintOptions {
   gasStrategy: GasStrategy
   customGasPriceGwei?: number
   walletIndices?: number[]
+  /** Optional signal to abort the scheduled mint */
+  signal?: AbortSignal
 }
 
 /**
@@ -32,20 +34,25 @@ export async function runScheduledMint(opts: ScheduledMintOptions): Promise<void
     throw new Error(`Invalid mint time: "${opts.mintTime}"\nUse ISO 8601 format, e.g. "2026-08-15T14:00:00Z"`)
   }
 
+  const totalCostEth = (parseFloat(opts.priceEth || '0') * opts.quantity).toString()
+  const totalCostWei = parseEther(totalCostEth)
+
   logger.banner()
   logger.info(`Mode: Scheduled Mint`)
   logger.info(`Contract: ${opts.contractAddress}`)
   logger.info(`Function: ${opts.functionName}(${opts.quantity})`)
-  logger.info(`Price: ${opts.priceEth} ETH × ${opts.quantity} per wallet`)
-  logger.info(`Target time: ${targetTime.toISOString()} (local: ${targetTime.toLocaleString()})`)
+  logger.info(`Price per NFT: ${opts.priceEth || '0'} ETH`)
+  logger.info(`Quantity per wallet: ${opts.quantity}`)
+  logger.info(`Total cost per wallet: ${totalCostEth} ETH`)
   logger.info(`Gas strategy: ${opts.gasStrategy}`)
+  logger.info(`Target time: ${targetTime.toISOString()} (local: ${targetTime.toLocaleString()})`)
+  if (opts.walletIndices && opts.walletIndices.length > 0) {
+    logger.info(`Selected wallets: Wallet ${opts.walletIndices.join(', Wallet ')}`)
+  }
   logger.divider()
 
   const publicClient = getPublicClient()
   const settings = getSettings()
-
-  const totalCostEth = (parseFloat(opts.priceEth) * opts.quantity).toString()
-  const totalCostWei = parseEther(totalCostEth)
 
   // Pre-load balances now — don't wait until mint time
   const wallets = await loadBalances(true, false, opts.walletIndices)
@@ -62,11 +69,34 @@ export async function runScheduledMint(opts: ScheduledMintOptions): Promise<void
     )
   }
 
+  logger.info(`Ready wallets (${solvent.length}): ${solvent.map((w) => `Wallet ${w.index} (${w.address.slice(0, 6)}...${w.address.slice(-4)})`).join(', ')}`)
+  logger.info(`Total estimated spend: ${grandTotalEth.toFixed(4)} ETH across ${solvent.length} wallet(s) (${solvent.length * opts.quantity} NFTs total)`)
+  logger.divider()
+
   const sigKey = `${opts.functionName}(uint256)`
   const resolvedAbi: Abi = opts.abi ?? [COMMON_MINT_ABIS[sigKey] ?? COMMON_MINT_ABIS['mint(uint256)']]
 
-  // Wait until mint time with countdown
-  await sleepUntil(targetTime)
+  // Handle Ctrl+C in CLI mode
+  if (!opts.signal) {
+    process.once('SIGINT', () => {
+      logger.warn('\nInterrupted — stopping scheduled mint.')
+      process.exit(0)
+    })
+  }
+
+  // Wait until mint time with countdown & abort handling
+  await sleepUntil(targetTime, opts.signal)
+
+  if (opts.signal?.aborted) {
+    logger.warn('Scheduled mint cancelled before firing.')
+    return
+  }
+
+  logger.divider()
+  logger.fire(`Launching scheduled mint for ${solvent.length} wallet(s) [${solvent.length * opts.quantity} NFTs total]`)
+  for (const w of solvent) {
+    logger.info(`Firing Wallet ${w.index} (${w.address}) | Qty: ${opts.quantity} | Value: ${totalCostEth} ETH | Gas: ${opts.gasStrategy.toUpperCase()}`)
+  }
 
   // Fetch nonces right at fire time (most accurate)
   const nonces = await Promise.all(solvent.map((w) => getNonce(w.address)))

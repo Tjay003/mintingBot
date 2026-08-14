@@ -650,13 +650,65 @@
 
     <!-- 5. SCHEDULE VIEW -->
     <section id="view-schedule" class="content-view">
-      <div class="card">
+      <!-- Active Schedule Countdown Card (shown when scheduled session is running) -->
+      <div id="active-schedule-card" class="card" style="display: none;">
+        <div class="card-title">
+          <span style="display: flex; align-items: center; gap: 8px;">
+            <i data-lucide="calendar-clock" style="color: var(--accent);"></i>
+            Active Scheduled Mint
+          </span>
+          <span class="badge badge-amber">
+            <i data-lucide="loader"></i> ARMED & COUNTING DOWN
+          </span>
+        </div>
+
+        <div style="background: var(--bg); border: var(--border-width) solid var(--border); border-radius: 8px; padding: 22px 16px; text-align: center; margin-bottom: 20px; box-shadow: 2px 2px 0px var(--border);">
+          <div style="font-size: 0.8rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Time Remaining Until Execution</div>
+          <div id="sched-live-countdown" style="font-size: 2.4rem; font-weight: 800; font-family: var(--font-mono); color: var(--accent-dark); margin: 8px 0;">--d : --h : --m : --s</div>
+          <div id="sched-live-target-time" style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">Target: --</div>
+        </div>
+
+        <div class="grid-3" style="gap: 14px; margin-bottom: 18px;">
+          <div style="padding: 12px; background: var(--bg); border: var(--border-width) solid var(--border); border-radius: 8px;">
+            <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Target Contract</div>
+            <div id="sched-live-target" style="font-size: 0.85rem; font-weight: 700; font-family: var(--font-mono); color: var(--text-main); margin-top: 4px; word-break: break-all;">--</div>
+          </div>
+          <div style="padding: 12px; background: var(--bg); border: var(--border-width) solid var(--border); border-radius: 8px;">
+            <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Price & Quantity</div>
+            <div id="sched-live-price-qty" style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin-top: 4px;">-- ETH (1 / wallet)</div>
+          </div>
+          <div style="padding: 12px; background: var(--bg); border: var(--border-width) solid var(--border); border-radius: 8px;">
+            <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Gas Strategy</div>
+            <div id="sched-live-gas" style="margin-top: 4px;"><span class="badge badge-indigo">TURBO</span></div>
+          </div>
+        </div>
+
+        <div style="padding: 12px 14px; background: var(--bg); border: var(--border-width) solid var(--border); border-radius: 8px; margin-bottom: 20px;">
+          <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px;">Participating Wallets & Total Cost</div>
+          <div id="sched-live-wallets" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+            <span class="badge badge-indigo">Loading wallets...</span>
+          </div>
+          <div id="sched-live-cost" style="font-size: 0.9rem; font-weight: 800; color: var(--green);">Total Est. Cost: -- ETH</div>
+        </div>
+
+        <div style="display: flex; gap: 12px;">
+          <button type="button" class="btn btn-danger" onclick="handleStopSession()">
+            <i data-lucide="x-circle"></i> Cancel Schedule
+          </button>
+        </div>
+      </div>
+
+      <!-- Schedule Setup Form Card -->
+      <div id="schedule-form-card" class="card">
         <div class="card-title">
           <span style="display: flex; align-items: center; gap: 8px;">
             <i data-lucide="calendar"></i> Schedule Mint
           </span>
+          <span class="badge badge-indigo">
+            <i data-lucide="timer"></i> TIME-BASED TRIGGER
+          </span>
         </div>
-        <form onsubmit="handleSchedule(event)">
+        <form id="schedule-form" onsubmit="handleSchedule(event)">
           <div class="form-group">
             <label>Target (OpenSea URL or 0x Address)</label>
             <input type="text" id="sched-target" class="form-control" placeholder="https://opensea.io/collection/..." required>
@@ -668,10 +720,57 @@
             </div>
             <div class="form-group">
               <label>Quantity / Wallet</label>
-              <input type="number" id="sched-qty" class="form-control" value="1" min="1">
+              <input type="number" id="sched-qty" class="form-control" value="1" min="1" oninput="updateScheduleSummary()">
             </div>
           </div>
-          <button type="submit" class="btn btn-primary">
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Price (ETH)</label>
+              <input type="text" id="sched-price" class="form-control" value="0" placeholder="0.0" oninput="updateScheduleSummary()">
+            </div>
+            <div class="form-group">
+              <label>Gas Strategy</label>
+              <select id="sched-gas" class="form-control" onchange="updateScheduleSummary()">
+                <option value="turbo" selected>Turbo (2.5x - Recommended for FCFS Drops)</option>
+                <option value="fast">Fast (1.5x)</option>
+                <option value="safe">Safe (1.0x)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 4px;">
+            <label style="display: flex; justify-content: space-between; align-items: center;">
+              <span>Select Active Wallets for Scheduled Mint</span>
+              <span style="font-size: 0.75rem; text-transform: none; font-weight: 600; color: var(--accent); cursor: pointer;" onclick="toggleAllScheduleWallets()">Toggle All</span>
+            </label>
+            <div id="schedule-wallets-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; padding: 12px; background: #FFFFFF; border: var(--border-width) solid var(--border); border-radius: 8px;">
+              <span style="color: var(--text-muted); font-size: 0.85rem;">Loading wallets...</span>
+            </div>
+          </div>
+
+          <!-- Summary Breakdown Box before scheduling -->
+          <div id="schedule-summary-box" style="margin-top: 18px; margin-bottom: 20px; padding: 16px; background: #FFFFFF; border: var(--border-width) solid var(--border); border-radius: 8px; box-shadow: 2px 2px 0px var(--border);">
+            <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+              <i data-lucide="calculator" style="width: 16px; height: 16px; color: var(--accent);"></i>
+              Estimated Schedule Summary Breakdown
+            </div>
+            <div class="grid-3">
+              <div style="padding: 12px; background: var(--bg); border: var(--border-width) solid var(--border); border-radius: 6px;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Selected Wallets</div>
+                <div id="sched-summary-wallets" style="font-size: 1.2rem; font-weight: 800; color: var(--text-main); margin-top: 4px;">0 Wallets</div>
+              </div>
+              <div style="padding: 12px; background: var(--bg); border: var(--border-width) solid var(--border); border-radius: 6px;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total NFTs to Mint</div>
+                <div id="sched-summary-nfts" style="font-size: 1.2rem; font-weight: 800; color: var(--accent-dark); margin-top: 4px;">0 NFTs</div>
+              </div>
+              <div style="padding: 12px; background: var(--bg); border: var(--border-width) solid var(--border); border-radius: 6px;">
+                <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Total Estimated Cost</div>
+                <div id="sched-summary-cost" style="font-size: 1.1rem; font-weight: 800; color: var(--green); margin-top: 4px;">0.0000 ETH (~$0 USDT)</div>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" id="btn-schedule-submit" class="btn btn-primary">
             <i data-lucide="clock"></i> Schedule Mint
           </button>
         </form>
@@ -683,6 +782,9 @@
   <script>
     const API = 'http://localhost:3000/api';
     let ws;
+    let walletsData = [];
+    let currentEthPriceUsdt = 0;
+    let scheduleCountdownInterval = null;
 
     function initWS() {
       const wsUrl = `ws://${location.host}`;
@@ -737,6 +839,10 @@
 
       if (tabName === 'wallets') fetchWallets();
       if (tabName === 'gas') loadGasPrices();
+      if (tabName === 'schedule') {
+        fetchWallets();
+        fetchSession();
+      }
     }
 
     function appendTerminal(level, message, timeStr) {
@@ -757,6 +863,14 @@
       return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
+    async function fetchSession() {
+      try {
+        const res = await fetch(`${API}/session`);
+        const session = await res.json();
+        updateSessionUI(session);
+      } catch (err) {}
+    }
+
     function updateSessionUI(session) {
       const badge = document.getElementById('session-badge');
       const startBtn = document.getElementById('btn-start');
@@ -764,16 +878,111 @@
 
       if (session.status === 'running') {
         badge.className = 'badge badge-amber';
-        badge.innerHTML = `<i data-lucide="loader"></i> RUNNING (${session.mode?.toUpperCase()})`;
-        startBtn.style.display = 'none';
-        stopBtn.style.display = 'inline-flex';
+        badge.innerHTML = `<i data-lucide="loader"></i> RUNNING (${(session.mode || '').toUpperCase()})`;
+        if (startBtn) startBtn.style.display = 'none';
+        if (stopBtn) stopBtn.style.display = 'inline-flex';
       } else {
         badge.className = 'badge badge-indigo';
-        badge.innerHTML = `<i data-lucide="circle-dot"></i> ${session.status.toUpperCase()}`;
-        startBtn.style.display = 'inline-flex';
-        stopBtn.style.display = 'none';
+        badge.innerHTML = `<i data-lucide="circle-dot"></i> ${(session.status || 'IDLE').toUpperCase()}`;
+        if (startBtn) startBtn.style.display = 'inline-flex';
+        if (stopBtn) stopBtn.style.display = 'none';
       }
+
+      // Schedule tab active card vs form handling
+      const schedActiveCard = document.getElementById('active-schedule-card');
+      const schedFormCard = document.getElementById('schedule-form-card');
+
+      if (session.status === 'running' && session.mode === 'scheduled') {
+        if (schedActiveCard) schedActiveCard.style.display = 'block';
+        if (schedFormCard) schedFormCard.style.display = 'none';
+
+        const targetEl = document.getElementById('sched-live-target');
+        if (targetEl) targetEl.innerText = session.contractAddress || session.target || '--';
+
+        const priceNum = parseFloat(session.priceEth || '0') || 0;
+        const qtyNum = session.quantity || 1;
+        const selectedCount = (session.selectedWallets && session.selectedWallets.length) ? session.selectedWallets.length : (walletsData.length || 1);
+        const totalNfts = selectedCount * qtyNum;
+        const totalEth = totalNfts * priceNum;
+        const totalUsdt = currentEthPriceUsdt ? (totalEth * currentEthPriceUsdt).toFixed(2) : '0.00';
+
+        const priceQtyEl = document.getElementById('sched-live-price-qty');
+        if (priceQtyEl) priceQtyEl.innerText = `${session.priceEth || '0'} ETH (${qtyNum} / wallet · ${totalNfts} NFTs)`;
+
+        const gasEl = document.getElementById('sched-live-gas');
+        if (gasEl) {
+          const strat = (session.gasStrategy || 'turbo').toUpperCase();
+          gasEl.innerHTML = `<span class="badge badge-green">${strat}</span>`;
+        }
+
+        const costEl = document.getElementById('sched-live-cost');
+        if (costEl) costEl.innerText = `Total Est. Cost: ${totalEth.toFixed(4)} ETH (~$${parseFloat(totalUsdt).toLocaleString()} USDT)`;
+
+        const walletsLiveEl = document.getElementById('sched-live-wallets');
+        if (walletsLiveEl) {
+          if (session.selectedWallets && session.selectedWallets.length > 0) {
+            walletsLiveEl.innerHTML = session.selectedWallets.map(idx => {
+              const w = walletsData.find(x => x.index === idx);
+              const addrStr = w ? `${w.address.slice(0, 6)}...${w.address.slice(-4)}` : '';
+              const balStr = w ? `(${w.balanceEth} ETH)` : '';
+              return `<span class="badge badge-indigo" style="font-family: var(--font-mono); font-size: 0.75rem;">Wallet ${idx} ${addrStr} ${balStr}</span>`;
+            }).join('');
+          } else {
+            walletsLiveEl.innerHTML = '<span class="badge badge-indigo">All Solvent Wallets</span>';
+          }
+        }
+
+        startScheduleCountdown(session.mintTime);
+      } else {
+        if (schedActiveCard) schedActiveCard.style.display = 'none';
+        if (schedFormCard) schedFormCard.style.display = 'block';
+        stopScheduleCountdown();
+      }
+
       lucide.createIcons();
+    }
+
+    function startScheduleCountdown(mintTimeStr) {
+      stopScheduleCountdown();
+      if (!mintTimeStr) return;
+
+      const targetDate = new Date(mintTimeStr);
+      const targetTimeEl = document.getElementById('sched-live-target-time');
+      if (targetTimeEl) {
+        targetTimeEl.innerText = `Target Execution: ${targetDate.toLocaleString()} (${targetDate.toISOString()})`;
+      }
+
+      const updateCountdown = () => {
+        const countdownEl = document.getElementById('sched-live-countdown');
+        if (!countdownEl) return;
+
+        const diff = targetDate.getTime() - Date.now();
+        if (diff <= 0) {
+          countdownEl.innerText = '00d : 00h : 00m : 00s (FIRING NOW)';
+          countdownEl.style.color = 'var(--accent)';
+          return;
+        }
+
+        const totalSec = Math.floor(diff / 1000);
+        const days = Math.floor(totalSec / 86400);
+        const hours = Math.floor((totalSec % 86400) / 3600);
+        const mins = Math.floor((totalSec % 3600) / 60);
+        const secs = totalSec % 60;
+
+        const pad = (n) => String(n).padStart(2, '0');
+        countdownEl.innerText = `${days > 0 ? `${days}d : ` : ''}${pad(hours)}h : ${pad(mins)}m : ${pad(secs)}s`;
+        countdownEl.style.color = totalSec <= 30 ? 'var(--red)' : 'var(--accent-dark)';
+      };
+
+      updateCountdown();
+      scheduleCountdownInterval = setInterval(updateCountdown, 1000);
+    }
+
+    function stopScheduleCountdown() {
+      if (scheduleCountdownInterval) {
+        clearInterval(scheduleCountdownInterval);
+        scheduleCountdownInterval = null;
+      }
     }
 
     async function handleStartSession(e) {
@@ -802,6 +1011,7 @@
         });
         const data = await res.json();
         if (!res.ok) alert(data.error);
+        else fetchSession();
       } catch (err) {
         alert(err);
       }
@@ -813,9 +1023,39 @@
       cbs.forEach(cb => cb.checked = !allChecked);
     }
 
+    function toggleAllScheduleWallets() {
+      const cbs = document.querySelectorAll('.schedule-wallet-cb');
+      const allChecked = Array.from(cbs).every(cb => cb.checked);
+      cbs.forEach(cb => cb.checked = !allChecked);
+      updateScheduleSummary();
+    }
+
+    function updateScheduleSummary() {
+      const checkedCbs = document.querySelectorAll('.schedule-wallet-cb:checked');
+      const count = checkedCbs.length;
+      const qty = parseInt(document.getElementById('sched-qty')?.value || '1', 10) || 1;
+      const price = parseFloat(document.getElementById('sched-price')?.value || '0') || 0;
+      const totalNfts = count * qty;
+      const totalEth = totalNfts * price;
+      const totalUsdt = currentEthPriceUsdt ? (totalEth * currentEthPriceUsdt).toFixed(2) : '0.00';
+
+      const walletsEl = document.getElementById('sched-summary-wallets');
+      const nftsEl = document.getElementById('sched-summary-nfts');
+      const costEl = document.getElementById('sched-summary-cost');
+
+      if (walletsEl) walletsEl.innerText = `${count} Wallet${count === 1 ? '' : 's'}`;
+      if (nftsEl) nftsEl.innerText = `${totalNfts} NFTs (${count} × ${qty})`;
+      if (costEl) costEl.innerText = `${totalEth.toFixed(4)} ETH (~$${parseFloat(totalUsdt).toLocaleString()} USDT)`;
+    }
+
     async function handleStopSession() {
       try {
-        await fetch(`${API}/session/stop`, { method: 'POST' });
+        const res = await fetch(`${API}/session/stop`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) alert(data.error);
+        else {
+          fetchSession();
+        }
       } catch (err) {
         alert(err);
       }
@@ -877,19 +1117,24 @@
     async function fetchWallets() {
       const tbody = document.getElementById('wallets-tbody');
       const sessionList = document.getElementById('session-wallets-list');
+      const scheduleList = document.getElementById('schedule-wallets-list');
       try {
         const res = await fetch(`${API}/wallets`);
         const data = await res.json();
+        walletsData = data.wallets || [];
         if (data.ethPriceUsdt) {
+          currentEthPriceUsdt = data.ethPriceUsdt;
           document.getElementById('eth-price-badge').innerHTML = `<i data-lucide="coins"></i> ETH: $${data.ethPriceUsdt.toLocaleString()} USDT`;
         }
-        if (data.wallets.length === 0) {
+        if (walletsData.length === 0) {
           tbody.innerHTML = '<tr><td colspan="4" style="color: var(--text-muted);">No wallets configured. Add one above.</td></tr>';
           sessionList.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85rem;">No wallets configured. Add wallets first.</span>';
+          if (scheduleList) scheduleList.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85rem;">No wallets configured. Add wallets first.</span>';
+          updateScheduleSummary();
           return;
         }
 
-        tbody.innerHTML = data.wallets.map(w => `
+        tbody.innerHTML = walletsData.map(w => `
           <tr>
             <td><strong>Wallet ${w.index}</strong></td>
             <td><code>${w.address}</code></td>
@@ -902,17 +1147,28 @@
           </tr>
         `).join('');
 
-        sessionList.innerHTML = data.wallets.map(w => `
+        sessionList.innerHTML = walletsData.map(w => `
           <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; user-select: none;">
             <input type="checkbox" class="session-wallet-cb" value="${w.index}" checked>
-            <span>Wallet ${w.index} <code style="font-size: 0.75rem; color: var(--text-muted);">${w.address.slice(0,6)}...${w.address.slice(-4)}</code> (${w.balanceEth} ETH)</span>
+            <span>Wallet ${w.index} <code style="font-size: 0.75rem; color: var(--text-muted);">${w.address.slice(0,6)}...${w.address.slice(-4)}</code> (${w.balanceEth} ETH / ~${w.balanceUsdt || '$0 USDT'})</span>
           </label>
         `).join('');
 
+        if (scheduleList) {
+          scheduleList.innerHTML = walletsData.map(w => `
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; user-select: none;">
+              <input type="checkbox" class="schedule-wallet-cb" value="${w.index}" checked onchange="updateScheduleSummary()">
+              <span>Wallet ${w.index} <code style="font-size: 0.75rem; color: var(--text-muted);">${w.address.slice(0,6)}...${w.address.slice(-4)}</code> (${w.balanceEth} ETH / ~${w.balanceUsdt || '$0 USDT'})</span>
+            </label>
+          `).join('');
+        }
+
+        updateScheduleSummary();
         lucide.createIcons();
       } catch (err) {
         tbody.innerHTML = '<tr><td colspan="4" style="color: var(--red);">Failed to load wallets.</td></tr>';
         sessionList.innerHTML = '<span style="color: var(--red); font-size: 0.85rem;">Failed to load wallets.</span>';
+        if (scheduleList) scheduleList.innerHTML = '<span style="color: var(--red); font-size: 0.85rem;">Failed to load wallets.</span>';
       }
     }
 
@@ -948,6 +1204,7 @@
         const res = await fetch(`${API}/gas`);
         const data = await res.json();
         if (data.ethPriceUsdt) {
+          currentEthPriceUsdt = data.ethPriceUsdt;
           document.getElementById('eth-price-badge').innerHTML = `<i data-lucide="coins"></i> ETH: $${data.ethPriceUsdt.toLocaleString()} USDT`;
         }
 
@@ -965,26 +1222,62 @@
 
     async function handleSchedule(e) {
       e.preventDefault();
-      const target = document.getElementById('sched-target').value;
+      const target = document.getElementById('sched-target').value.trim();
       const timeStr = document.getElementById('sched-time').value;
-      const quantity = parseInt(document.getElementById('sched-qty').value, 10);
-      const isoTime = new Date(timeStr).toISOString();
+      const quantity = parseInt(document.getElementById('sched-qty').value, 10) || 1;
+      const priceEth = document.getElementById('sched-price').value.trim() || '0';
+      const gasStrategy = document.getElementById('sched-gas').value;
+      const selectedWallets = Array.from(document.querySelectorAll('.schedule-wallet-cb:checked')).map(cb => parseInt(cb.value, 10));
+
+      if (!target) {
+        alert('Please enter a target contract address or OpenSea URL.');
+        return;
+      }
+      if (!timeStr) {
+        alert('Please select a scheduled mint date and time.');
+        return;
+      }
+      if (selectedWallets.length === 0) {
+        alert('Please select at least one wallet for the scheduled mint.');
+        return;
+      }
+
+      const targetDate = new Date(timeStr);
+      if (isNaN(targetDate.getTime())) {
+        alert('Invalid date & time selected.');
+        return;
+      }
+      const isoTime = targetDate.toISOString();
 
       try {
         const res = await fetch(`${API}/session/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'scheduled', target, quantity, mintTime: isoTime })
+          body: JSON.stringify({
+            mode: 'scheduled',
+            target,
+            mintTime: isoTime,
+            quantity,
+            priceEth,
+            gasStrategy,
+            selectedWallets
+          })
         });
         const data = await res.json();
-        if (!res.ok) alert(data.error);
-        else showTab('session', document.querySelector('.nav-item button'));
-      } catch (err) { alert(err); }
+        if (!res.ok) alert(data.error || 'Failed to schedule mint session');
+        else {
+          fetchSession();
+          showTab('schedule', document.querySelectorAll('.nav-item button')[4]);
+        }
+      } catch (err) {
+        alert(err);
+      }
     }
 
     window.onload = () => {
       initWS();
       fetchWallets();
+      fetchSession();
       lucide.createIcons();
     };
   </script>

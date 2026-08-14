@@ -20,8 +20,15 @@ export interface WsSessionEvent {
   status: 'idle' | 'running' | 'success' | 'error'
   mode?: string
   target?: string
+  contractAddress?: string
   blockCount?: number
   saleActive?: boolean | null
+  quantity?: number
+  priceEth?: string
+  gasStrategy?: string
+  mintTime?: string
+  selectedWallets?: number[]
+  error?: string
 }
 
 export interface WsBlockEvent {
