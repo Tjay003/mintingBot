@@ -51,7 +51,7 @@ const PROBE_ABI = [
   {
     name: 'getPublicDrop',
     type: 'function',
-    inputs: [{ name: 'seaDropImpl', type: 'address' }],
+    inputs: [{ name: 'nftContract', type: 'address' }],
     outputs: [
       {
         components: [
@@ -260,7 +260,7 @@ export async function analyzeContract(
     probe<[bigint, bigint, bigint]>(publicClient, contractAddress, PROBE_ABI[15], [zeroAddress]),
   ])
 
-  // Probe SeaDrop getPublicDrop across known routers
+  // Probe SeaDrop getPublicDrop across known routers (queried on the router address)
   let seaDropInfo: SeaDropPublicDropInfo | undefined
   if (isSeaDrop) {
     for (const router of SEADROP_ROUTERS) {
@@ -269,7 +269,7 @@ export async function analyzeContract(
         startTime: number
         endTime: number
         maxTotalMintableByWallet: number
-      }>(publicClient, contractAddress, PROBE_ABI[16], [router])
+      }>(publicClient, router, PROBE_ABI[16], [contractAddress])
 
       if (pd && pd.maxTotalMintableByWallet > 0) {
         const now = Math.floor(Date.now() / 1000)
