@@ -31,7 +31,16 @@ router.post('/', async (req, res) => {
         maxSupply: analysis.maxSupply?.toString() ?? null,
         mintFunctions: analysis.mintFunctions,
         detectedMintFn: analysis.detectedMintFn ?? null,
-        seaDropInfo: analysis.seaDropInfo ?? null,
+        seaDropInfo: analysis.seaDropInfo ? {
+          mintPriceWei: analysis.seaDropInfo.mintPrice.toString(),
+          mintPriceEth: analysis.seaDropInfo.mintPriceEth,
+          startTime: analysis.seaDropInfo.startTime,
+          endTime: analysis.seaDropInfo.endTime,
+          maxTotalMintableByWallet: analysis.seaDropInfo.maxTotalMintableByWallet,
+          startTimeIso: analysis.seaDropInfo.startTimeIso,
+          endTimeIso: analysis.seaDropInfo.endTimeIso,
+          isLive: analysis.seaDropInfo.isLive,
+        } : null,
       },
     })
   } catch (err) {
