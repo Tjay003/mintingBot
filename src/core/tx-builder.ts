@@ -107,12 +107,14 @@ export async function buildMintTransaction(
 export async function sendTransaction(
   publicClient: PublicClient,
   tx: BuiltTransaction,
-): Promise<`0x${string}`> {
+): Promise<{ hash: `0x${string}`; submitDurationMs: number; confirmDurationMs: number; totalDurationMs: number; blockNumber?: bigint }> {
   const { wallet } = tx
   const ethValue = parseFloat(formatEther(tx.value)).toFixed(4)
+  const startTime = performance.now()
 
   logger.info(`Wallet ${wallet.index} → sending tx  (${ethValue} ETH, nonce ${tx.nonce})`)
 
+  const sendStartTime = performance.now()
   const hash = await wallet.client.sendTransaction({
     account: wallet.client.account!,
     to: tx.contractAddress,
@@ -124,32 +126,53 @@ export async function sendTransaction(
     nonce: tx.nonce,
     chain: wallet.client.chain,
   })
+  const submitDurationMs = Math.round(performance.now() - sendStartTime)
 
-  logger.info(`Wallet ${wallet.index} → tx submitted  ${hash}`)
+  logger.info(`Wallet ${wallet.index} → tx submitted  ${hash}  (${submitDurationMs}ms)`)
 
   // Wait for 1 confirmation
+  const confirmStartTime = performance.now()
   const receipt = await publicClient.waitForTransactionReceipt({ hash, confirmations: 1 })
+  const confirmDurationMs = Math.round(performance.now() - confirmStartTime)
+  const totalDurationMs = Math.round(performance.now() - startTime)
 
   if (receipt.status === 'success') {
-    logger.success(`Wallet ${wallet.index} → confirmed ✓  block #${receipt.blockNumber}`)
+    logger.success(
+      `Wallet ${wallet.index} → confirmed ✓  block #${receipt.blockNumber}  (${confirmDurationMs}ms | total: ${(totalDurationMs / 1000).toFixed(2)}s)`,
+    )
   } else {
-    logger.error(`Wallet ${wallet.index} → tx REVERTED  ${hash}`)
+    logger.error(`Wallet ${wallet.index} → tx REVERTED  ${hash}  (total: ${(totalDurationMs / 1000).toFixed(2)}s)`)
     throw new Error(`Transaction reverted: ${hash}`)
   }
 
-  return hash
+  return {
+    hash,
+    submitDurationMs,
+    confirmDurationMs,
+    totalDurationMs,
+    blockNumber: receipt.blockNumber,
+  }
 }
 
 /**
  * Build and send mint transactions for ALL wallets in parallel.
- * Returns results for each wallet (success or failure).
+ * Returns results for each wallet (success or failure) with timing metrics.
  */
 export async function executeParallelMint(
   publicClient: PublicClient,
   wallets: ManagedWallet[],
   params: MintParams,
   nonces: number[],
-): Promise<Array<{ wallet: ManagedWallet; hash?: string; error?: string }>> {
+): Promise<Array<{
+  wallet: ManagedWallet
+  hash?: string
+  error?: string
+  submitDurationMs?: number
+  confirmDurationMs?: number
+  totalDurationMs?: number
+}>> {
+  const overallStart = performance.now()
+
   // Build all transactions first (in parallel)
   const buildResults = await Promise.allSettled(
     wallets.map((w, i) => buildMintTransaction(publicClient, w, params, nonces[i])),
@@ -176,10 +199,15 @@ export async function executeParallelMint(
     txs.map((tx) => sendTransaction(publicClient, tx)),
   )
 
+  const overallTotalMs = Math.round(performance.now() - overallStart)
+
   return sendResults.map((result, i) => ({
     wallet: txs[i].wallet,
-    hash: result.status === 'fulfilled' ? result.value : undefined,
+    hash: result.status === 'fulfilled' ? result.value.hash : undefined,
     error: result.status === 'rejected' ? String(result.reason) : undefined,
+    submitDurationMs: result.status === 'fulfilled' ? result.value.submitDurationMs : undefined,
+    confirmDurationMs: result.status === 'fulfilled' ? result.value.confirmDurationMs : undefined,
+    totalDurationMs: result.status === 'fulfilled' ? result.value.totalDurationMs : undefined,
   }))
 }
 

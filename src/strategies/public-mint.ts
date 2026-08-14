@@ -123,7 +123,8 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
   let successCount = 0
   for (const r of results) {
     if (r.hash) {
-      logger.success(`Wallet ${r.wallet.index} ✓  ${r.hash}`)
+      const timingStr = r.totalDurationMs ? ` (took ${(r.totalDurationMs / 1000).toFixed(2)}s)` : ''
+      logger.success(`Wallet ${r.wallet.index} ✓  ${r.hash}${timingStr}`)
       successCount++
     } else {
       logger.error(`Wallet ${r.wallet.index} ✗  ${r.error}`)
