@@ -49,9 +49,24 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
   const publicClient = getPublicClient()
   const settings = getSettings()
 
+  // Analyze contract to check if it is OpenSea SeaDrop & detect price
+  const analysis = await analyzeContract(publicClient, opts.contractAddress)
+  const isSeaDrop = analysis.isSeaDrop || opts.functionName === 'mintSeaDrop' || opts.functionName === 'mintSeaDrop(address,uint256)'
+
+  // Auto-detect price if not explicitly provided or if on-chain price is detected
+  let effectivePriceEth = opts.priceEth?.trim()
+  if (!effectivePriceEth || effectivePriceEth.toLowerCase() === 'auto' || (parseFloat(effectivePriceEth) === 0 && analysis.mintPriceEth && parseFloat(analysis.mintPriceEth) > 0)) {
+    if (analysis.mintPriceEth) {
+      effectivePriceEth = analysis.mintPriceEth
+      logger.info(`Auto-detected on-chain price: ${effectivePriceEth} ETH`)
+    } else {
+      effectivePriceEth = '0'
+    }
+  }
+
   // Load and filter wallets by balance
   const wallets = await loadBalances(true, false, opts.walletIndices)
-  const totalCostEth = (parseFloat(opts.priceEth) * opts.quantity).toString()
+  const totalCostEth = (parseFloat(effectivePriceEth) * opts.quantity).toString()
   const totalCostWei = parseEther(totalCostEth)
 
   const solvent = filterSolventWallets(wallets, totalCostWei)
@@ -66,10 +81,6 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
       `Total spend (${grandTotalEth} ETH across ${solvent.length} wallets) exceeds MAX_TOTAL_ETH (${settings.safety.maxTotalEth} ETH)`,
     )
   }
-
-  // Analyze contract to check if it is OpenSea SeaDrop
-  const analysis = await analyzeContract(publicClient, opts.contractAddress)
-  const isSeaDrop = analysis.isSeaDrop || opts.functionName === 'mintSeaDrop' || opts.functionName === 'mintSeaDrop(address,uint256)'
 
   // Resolve ABI
   const sigKey = `${opts.functionName}(uint256)`

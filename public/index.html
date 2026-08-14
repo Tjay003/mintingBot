@@ -495,7 +495,7 @@
           <div class="grid-2">
             <div class="form-group">
               <label>Target (OpenSea URL or 0x Contract)</label>
-              <input type="text" id="target-input" class="form-control" placeholder="https://opensea.io/collection/..." required>
+              <input type="text" id="target-input" class="form-control" placeholder="https://opensea.io/collection/..." oninput="autoDetectPriceForSession()" required>
             </div>
             <div class="form-group">
               <label>Mint Mode</label>
@@ -512,8 +512,11 @@
               <input type="number" id="qty-input" class="form-control" value="1" min="1">
             </div>
             <div class="form-group">
-              <label>Price (ETH)</label>
-              <input type="text" id="price-input" class="form-control" value="0">
+              <label style="display: flex; justify-content: space-between;">
+                <span>Price (ETH)</span>
+                <span id="session-price-badge" style="font-size: 0.7rem; color: var(--accent-dark); font-weight: 700;">AUTO-DETECT ON</span>
+              </label>
+              <input type="text" id="price-input" class="form-control" value="0" placeholder="Auto (detects on-chain)">
             </div>
             <div class="form-group">
               <label>Gas Strategy</label>
@@ -711,7 +714,7 @@
         <form id="schedule-form" onsubmit="handleSchedule(event)">
           <div class="form-group">
             <label>Target (OpenSea URL or 0x Address)</label>
-            <input type="text" id="sched-target" class="form-control" placeholder="https://opensea.io/collection/..." required>
+            <input type="text" id="sched-target" class="form-control" placeholder="https://opensea.io/collection/..." oninput="autoDetectPriceForSchedule()" required>
           </div>
           <div class="grid-2">
             <div class="form-group">
@@ -725,8 +728,11 @@
           </div>
           <div class="grid-2">
             <div class="form-group">
-              <label>Price (ETH)</label>
-              <input type="text" id="sched-price" class="form-control" value="0" placeholder="0.0" oninput="updateScheduleSummary()">
+              <label style="display: flex; justify-content: space-between;">
+                <span>Price (ETH)</span>
+                <span id="sched-price-badge" style="font-size: 0.7rem; color: var(--accent-dark); font-weight: 700;">AUTO-DETECT ON</span>
+              </label>
+              <input type="text" id="sched-price" class="form-control" value="0" placeholder="Auto (detects on-chain)" oninput="updateScheduleSummary()">
             </div>
             <div class="form-group">
               <label>Gas Strategy</label>
@@ -1015,6 +1021,67 @@
       } catch (err) {
         alert(err);
       }
+    }
+
+    let analyzeDebounceTimer = null;
+
+    function autoDetectPriceForSession() {
+      clearTimeout(analyzeDebounceTimer);
+      const target = document.getElementById('target-input')?.value?.trim();
+      if (!target || target.length < 10) return;
+
+      const badge = document.getElementById('session-price-badge');
+      if (badge) badge.innerText = 'DETECTING...';
+
+      analyzeDebounceTimer = setTimeout(async () => {
+        try {
+          const res = await fetch(`${API}/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target })
+          });
+          const data = await res.json();
+          if (data?.analysis) {
+            const price = data.analysis.mintPriceEth || '0';
+            const priceInput = document.getElementById('price-input');
+            if (priceInput) priceInput.value = price;
+            if (badge) badge.innerText = `✓ AUTO: ${price} ETH`;
+          }
+        } catch (e) {
+          if (badge) badge.innerText = 'AUTO-DETECT ON';
+        }
+      }, 600);
+    }
+
+    function autoDetectPriceForSchedule() {
+      clearTimeout(analyzeDebounceTimer);
+      const target = document.getElementById('sched-target')?.value?.trim();
+      if (!target || target.length < 10) return;
+
+      const badge = document.getElementById('sched-price-badge');
+      if (badge) badge.innerText = 'DETECTING...';
+
+      analyzeDebounceTimer = setTimeout(async () => {
+        try {
+          const res = await fetch(`${API}/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target })
+          });
+          const data = await res.json();
+          if (data?.analysis) {
+            const price = data.analysis.mintPriceEth || '0';
+            const priceInput = document.getElementById('sched-price');
+            if (priceInput) {
+              priceInput.value = price;
+              updateScheduleSummary();
+            }
+            if (badge) badge.innerText = `✓ AUTO: ${price} ETH`;
+          }
+        } catch (e) {
+          if (badge) badge.innerText = 'AUTO-DETECT ON';
+        }
+      }, 600);
     }
 
     function toggleAllSessionWallets() {

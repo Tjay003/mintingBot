@@ -52,7 +52,22 @@ export async function runSnipeMint(opts: SnipeMintOptions): Promise<void> {
   const wsClient = getWsPublicClient()
   const settings = getSettings()
 
-  const totalCostEth = (parseFloat(opts.priceEth) * opts.quantity).toString()
+  // Analyze contract to check if it is OpenSea SeaDrop & detect price
+  const analysis = await analyzeContract(publicClient, opts.contractAddress)
+  const isSeaDrop = analysis.isSeaDrop || opts.functionName === 'mintSeaDrop' || opts.functionName === 'mintSeaDrop(address,uint256)'
+
+  // Auto-detect price if not explicitly provided or if on-chain price is detected
+  let effectivePriceEth = opts.priceEth?.trim()
+  if (!effectivePriceEth || effectivePriceEth.toLowerCase() === 'auto' || (parseFloat(effectivePriceEth) === 0 && analysis.mintPriceEth && parseFloat(analysis.mintPriceEth) > 0)) {
+    if (analysis.mintPriceEth) {
+      effectivePriceEth = analysis.mintPriceEth
+      logger.info(`Auto-detected on-chain price: ${effectivePriceEth} ETH`)
+    } else {
+      effectivePriceEth = '0'
+    }
+  }
+
+  const totalCostEth = (parseFloat(effectivePriceEth) * opts.quantity).toString()
   const totalCostWei = parseEther(totalCostEth)
 
   const wallets = await loadBalances(true, false, opts.walletIndices)
