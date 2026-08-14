@@ -253,3 +253,25 @@ export const COMMON_MINT_ABIS: Record<string, AbiFunction> = {
     stateMutability: 'payable',
   },
 }
+
+/** Canonical SeaDrop router on Robinhood Chain / EVM */
+export const SEADROP_ROUTER_ADDRESS: Address = '0x00005EA00Ac477B1030CE78506496e8C2dE24bf5'
+/** OpenSea platform fee recipient on Robinhood Chain */
+export const OPENSEA_FEE_RECIPIENT: Address = '0x0000a26b00c1f0df003000390027140000faa719'
+export const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000'
+
+export const SEADROP_MINT_PUBLIC_ABI: Abi = [
+  {
+    name: 'mintPublic',
+    type: 'function',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'nftContract', type: 'address' },
+      { name: 'feeRecipient', type: 'address' },
+      { name: 'minterIfNotPayer', type: 'address' },
+      { name: 'quantity', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+]
+

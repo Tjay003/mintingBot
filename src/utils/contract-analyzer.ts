@@ -8,10 +8,10 @@ import {
 import { logger } from './logger.js'
 
 /** Canonical SeaDrop router addresses across EVM chains */
-const SEADROP_ROUTERS: Address[] = [
+export const SEADROP_ROUTERS: Address[] = [
   '0x00005EA00Ac477B1030CE78506496e8C2dE24bf5',
   '0x0000000005B502c4748b1576532828042b220000',
-  '0x000000000000068F116a894984e2DB1123eB395',
+  '0x0000000000000068F116a894984e2DB1123eB395',
 ]
 
 /** ABI fragments used for analysis probing */
