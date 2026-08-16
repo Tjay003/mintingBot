@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MintBot — Robinhood Chain Dashboard</title>
+  <link rel="icon" type="image/jpeg" href="/icon.jpeg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -87,18 +88,15 @@
       overflow: hidden;
     }
 
-    .brand-icon {
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    .brand-img-logo {
       width: 36px;
       height: 36px;
-      background: var(--accent);
-      border: var(--border-width) solid var(--border);
       border-radius: 8px;
+      border: 2px solid var(--green);
       box-shadow: 2px 2px 0px var(--border);
-      color: #0F172A;
-      shrink: 0;
+      object-fit: cover;
+      flex-shrink: 0;
+      display: block;
     }
 
     .brand-text {
@@ -515,7 +513,7 @@
     </button>
     <div class="brand">
       <div class="brand-logo">
-        <div class="brand-icon"><i data-lucide="crosshair"></i></div>
+        <img src="/icon.jpeg" class="brand-img-logo" alt="MintBot Logo">
         <span class="brand-text">MintBot</span>
       </div>
     </div>
