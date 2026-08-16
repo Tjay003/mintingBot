@@ -372,7 +372,99 @@
     .badge-green { background: var(--green-light); color: var(--green); }
     .badge-amber { background: var(--amber-light); color: var(--amber); }
     .badge-red { background: var(--red-light); color: var(--red); }
-    .badge-indigo { background: var(--accent-light); color: var(--accent-dark); }
+    /* Wallet Select Row Layout */
+    .wallet-select-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 260px;
+      overflow-y: auto;
+      padding: 10px;
+      background: #F8FAFC;
+      border: var(--border-width) solid var(--border);
+      border-radius: 8px;
+    }
+
+    .wallet-select-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #FFFFFF;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease;
+      box-shadow: 2px 2px 0px rgba(15, 23, 42, 0.04);
+    }
+
+    .wallet-select-row:hover {
+      border-color: var(--accent);
+      background: #F0FDF4;
+      transform: translateY(-1px);
+      box-shadow: 2px 2px 0px var(--border);
+    }
+
+    .wallet-select-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .wallet-select-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .wallet-select-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+    }
+
+    .wallet-select-title {
+      font-weight: 700;
+      font-size: 0.88rem;
+      color: var(--text-main);
+    }
+
+    .wallet-select-addr {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      background: #F1F5F9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+    }
+
+    .wallet-select-eth {
+      font-weight: 700;
+      font-size: 0.88rem;
+      color: var(--accent-dark);
+      font-family: var(--font-mono);
+    }
+
+    .wallet-select-usd {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .sched-live-wallet-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #FFFFFF;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 1px 1px 0px var(--border);
+    }
 
     /* Console Terminal */
     .terminal {
@@ -532,7 +624,7 @@
               <span>Select Active Wallets for Session</span>
               <span style="font-size: 0.75rem; text-transform: none; font-weight: 600; color: var(--accent); cursor: pointer;" onclick="toggleAllSessionWallets()">Toggle All</span>
             </label>
-            <div id="session-wallets-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; padding: 12px; background: #FFFFFF; border: var(--border-width) solid var(--border); border-radius: 8px;">
+            <div id="session-wallets-list" class="wallet-select-container">
               <span style="color: var(--text-muted); font-size: 0.85rem;">Loading wallets...</span>
             </div>
           </div>
@@ -688,7 +780,7 @@
 
         <div style="padding: 12px 14px; background: var(--bg); border: var(--border-width) solid var(--border); border-radius: 8px; margin-bottom: 20px;">
           <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px;">Participating Wallets & Total Cost</div>
-          <div id="sched-live-wallets" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+          <div id="sched-live-wallets" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
             <span class="badge badge-indigo">Loading wallets...</span>
           </div>
           <div id="sched-live-cost" style="font-size: 0.9rem; font-weight: 800; color: var(--green);">Total Est. Cost: -- ETH</div>
@@ -749,7 +841,7 @@
               <span>Select Active Wallets for Scheduled Mint</span>
               <span style="font-size: 0.75rem; text-transform: none; font-weight: 600; color: var(--accent); cursor: pointer;" onclick="toggleAllScheduleWallets()">Toggle All</span>
             </label>
-            <div id="schedule-wallets-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; padding: 12px; background: #FFFFFF; border: var(--border-width) solid var(--border); border-radius: 8px;">
+            <div id="schedule-wallets-list" class="wallet-select-container">
               <span style="color: var(--text-muted); font-size: 0.85rem;">Loading wallets...</span>
             </div>
           </div>
@@ -929,9 +1021,22 @@
           if (session.selectedWallets && session.selectedWallets.length > 0) {
             walletsLiveEl.innerHTML = session.selectedWallets.map(idx => {
               const w = walletsData.find(x => x.index === idx);
-              const addrStr = w ? `${w.address.slice(0, 6)}...${w.address.slice(-4)}` : '';
-              const balStr = w ? `(${w.balanceEth} ETH)` : '';
-              return `<span class="badge badge-indigo" style="font-family: var(--font-mono); font-size: 0.75rem;">Wallet ${idx} ${addrStr} ${balStr}</span>`;
+              const addrStr = w ? w.address : '';
+              const balStr = w ? `${w.balanceEth} ETH` : '';
+              const usdtStr = w && w.balanceUsdt ? `(~${w.balanceUsdt})` : '';
+              return `
+                <div class="sched-live-wallet-row">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="badge badge-green" style="font-size: 0.7rem; padding: 2px 8px;">ARMED</span>
+                    <strong style="font-size: 0.88rem;">Wallet ${idx}</strong>
+                    <code style="font-size: 0.78rem; color: var(--text-muted); background: #F1F5F9; padding: 2px 6px; border-radius: 4px;">${addrStr}</code>
+                  </div>
+                  <div style="display: flex; align-items: baseline; gap: 6px;">
+                    <span style="font-family: var(--font-mono); font-size: 0.88rem; font-weight: 700; color: var(--accent-dark);">${balStr}</span>
+                    <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">${usdtStr}</span>
+                  </div>
+                </div>
+              `;
             }).join('');
           } else {
             walletsLiveEl.innerHTML = '<span class="badge badge-indigo">All Solvent Wallets</span>';
@@ -1215,17 +1320,35 @@
         `).join('');
 
         sessionList.innerHTML = walletsData.map(w => `
-          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; user-select: none;">
-            <input type="checkbox" class="session-wallet-cb" value="${w.index}" checked>
-            <span>Wallet ${w.index} <code style="font-size: 0.75rem; color: var(--text-muted);">${w.address.slice(0,6)}...${w.address.slice(-4)}</code> (${w.balanceEth} ETH / ~${w.balanceUsdt || '$0 USDT'})</span>
+          <label class="wallet-select-row">
+            <div class="wallet-select-left">
+              <input type="checkbox" class="session-wallet-cb" value="${w.index}" checked>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span class="wallet-select-title">Wallet ${w.index}</span>
+                <code class="wallet-select-addr">${w.address}</code>
+              </div>
+            </div>
+            <div class="wallet-select-right">
+              <span class="wallet-select-eth">${w.balanceEth} ETH</span>
+              <span class="wallet-select-usd">~${w.balanceUsdt || '$0 USDT'}</span>
+            </div>
           </label>
         `).join('');
 
         if (scheduleList) {
           scheduleList.innerHTML = walletsData.map(w => `
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; user-select: none;">
-              <input type="checkbox" class="schedule-wallet-cb" value="${w.index}" checked onchange="updateScheduleSummary()">
-              <span>Wallet ${w.index} <code style="font-size: 0.75rem; color: var(--text-muted);">${w.address.slice(0,6)}...${w.address.slice(-4)}</code> (${w.balanceEth} ETH / ~${w.balanceUsdt || '$0 USDT'})</span>
+            <label class="wallet-select-row">
+              <div class="wallet-select-left">
+                <input type="checkbox" class="schedule-wallet-cb" value="${w.index}" checked onchange="updateScheduleSummary()">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span class="wallet-select-title">Wallet ${w.index}</span>
+                  <code class="wallet-select-addr">${w.address}</code>
+                </div>
+              </div>
+              <div class="wallet-select-right">
+                <span class="wallet-select-eth">${w.balanceEth} ETH</span>
+                <span class="wallet-select-usd">~${w.balanceUsdt || '$0 USDT'}</span>
+              </div>
             </label>
           `).join('');
         }
