@@ -66,6 +66,17 @@ function loadWalletKeys(): `0x${string}`[] {
   return keys
 }
 
+function loadWalletLabels(): Record<number, string> {
+  const labels: Record<number, string> = {}
+  for (let i = 1; i <= 20; i++) {
+    const label = optionalEnv(`WALLET_LABEL_${i}`)
+    if (label) {
+      labels[i] = label
+    }
+  }
+  return labels
+}
+
 function parseGwei(key: string, fallback: number): number {
   const raw = optionalEnv(key)
   const parsed = parseFloat(raw)
@@ -81,6 +92,7 @@ function parseEth(key: string, fallback: number): number {
 export interface Settings {
   rpc: { http: string; wss: string; isPrivate: boolean }
   walletKeys: `0x${string}`[]
+  walletLabels: Record<number, string>
   safety: {
     maxGasPriceGwei: number
     maxEthPerMint: number
@@ -97,10 +109,12 @@ export function getSettings(): Settings {
   if (_settings) return _settings
 
   const walletKeys = loadWalletKeys()
+  const walletLabels = loadWalletLabels()
 
   _settings = {
     rpc: resolveRpc(),
     walletKeys,
+    walletLabels,
     safety: {
       maxGasPriceGwei: parseGwei('MAX_GAS_PRICE_GWEI', 50),
       maxEthPerMint: parseEth('MAX_ETH_PER_MINT', 0.5),

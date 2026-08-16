@@ -67,6 +67,7 @@ MintBot supports 4 distinct minting archetypes with automatic detection:
 
 ### 👛 Multi-Wallet Selection & Wallet Manager
 - Clean, full-width row-by-row card layout for Active Sessions, Scheduled Drops, and Live Armed Countdown cards.
+- Custom wallet renaming/labels (`WALLET_LABEL_N` in `.env`, editable via UI pencil button in Wallets tab).
 - Interactive checkbox selection with hover transitions, address pills, and live ETH + USD balance values.
 - Real-time ETH/USDT live ticker from Binance / CoinGecko.
 

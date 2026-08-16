@@ -16,6 +16,7 @@ import { logger } from '../utils/logger.js'
 
 export interface ManagedWallet {
   index: number
+  label?: string
   address: Address
   client: WalletClient<Transport, typeof robinhoodChain>
   balance?: bigint
@@ -64,7 +65,7 @@ export function resetWallets(): void {
 export function getWallets(forceReload = false): ManagedWallet[] {
   if (forceReload) resetWallets()
   if (_wallets.length > 0) return _wallets
-  const { walletKeys, rpc } = getSettings()
+  const { walletKeys, walletLabels, rpc } = getSettings()
 
   _wallets = walletKeys.map((key, i) => {
     const account = privateKeyToAccount(key)
@@ -73,8 +74,10 @@ export function getWallets(forceReload = false): ManagedWallet[] {
       chain: robinhoodChain,
       transport: http(rpc.http),
     })
+    const index = i + 1
     return {
-      index: i + 1,
+      index,
+      label: walletLabels[index] || `Wallet ${index}`,
       address: account.address,
       client,
     }
@@ -106,7 +109,8 @@ export async function loadBalances(print = true, forceReload = false, walletIndi
     logger.info(`Wallets loaded  (${wallets.length} total)`)
     wallets.forEach((w) => {
       const eth = parseFloat(formatEther(w.balance ?? 0n)).toFixed(4)
-      logger.info(`  Wallet ${w.index}  ${w.address}  →  ${eth} ETH`)
+      const name = w.label && w.label !== `Wallet ${w.index}` ? `Wallet ${w.index} (${w.label})` : `Wallet ${w.index}`
+      logger.info(`  ${name}  ${w.address}  →  ${eth} ETH`)
     })
     logger.divider()
   }

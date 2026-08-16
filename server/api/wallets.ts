@@ -29,6 +29,7 @@ router.get('/', async (_req, res) => {
       const ethNum = parseFloat(formatEther(w.balance ?? 0n))
       return {
         index: w.index,
+        label: w.label || `Wallet ${w.index}`,
         address: w.address,
         balanceWei: w.balance?.toString() ?? '0',
         balanceEth: ethNum.toFixed(4),
@@ -38,6 +39,43 @@ router.get('/', async (_req, res) => {
     res.json({ ethPriceUsdt, wallets: data })
   } catch (err) {
     res.json({ wallets: [] })
+  }
+})
+
+/** PUT /api/wallets/:index/label — rename a wallet */
+router.put('/:index/label', (req, res) => {
+  const idx = parseInt(req.params.index, 10)
+  const { label } = req.body as { label?: string }
+  if (isNaN(idx) || idx < 1) {
+    res.status(400).json({ error: 'Invalid wallet index.' })
+    return
+  }
+
+  try {
+    const envContent = readEnvFile()
+    const lines = envContent.split('\n')
+    const cleanedLabel = (label || '').trim()
+
+    let found = false
+    const newLines = lines.map((l) => {
+      if (l.trim().startsWith(`WALLET_LABEL_${idx}=`)) {
+        found = true
+        return `WALLET_LABEL_${idx}=${cleanedLabel}`
+      }
+      return l
+    })
+
+    if (!found && cleanedLabel) {
+      newLines.push(`WALLET_LABEL_${idx}=${cleanedLabel}`)
+    }
+
+    writeEnvFile(newLines.join('\n').trim() + '\n')
+    resetSettings()
+    resetWallets()
+
+    res.json({ success: true, index: idx, label: cleanedLabel || `Wallet ${idx}` })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
   }
 })
 

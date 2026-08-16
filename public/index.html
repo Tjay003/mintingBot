@@ -1021,6 +1021,7 @@
           if (session.selectedWallets && session.selectedWallets.length > 0) {
             walletsLiveEl.innerHTML = session.selectedWallets.map(idx => {
               const w = walletsData.find(x => x.index === idx);
+              const nameStr = w ? (w.label || `Wallet ${idx}`) : `Wallet ${idx}`;
               const addrStr = w ? w.address : '';
               const balStr = w ? `${w.balanceEth} ETH` : '';
               const usdtStr = w && w.balanceUsdt ? `(~${w.balanceUsdt})` : '';
@@ -1028,7 +1029,7 @@
                 <div class="sched-live-wallet-row">
                   <div style="display: flex; align-items: center; gap: 10px;">
                     <span class="badge badge-green" style="font-size: 0.7rem; padding: 2px 8px;">ARMED</span>
-                    <strong style="font-size: 0.88rem;">Wallet ${idx}</strong>
+                    <strong style="font-size: 0.88rem;">${nameStr}</strong>
                     <code style="font-size: 0.78rem; color: var(--text-muted); background: #F1F5F9; padding: 2px 6px; border-radius: 4px;">${addrStr}</code>
                   </div>
                   <div style="display: flex; align-items: baseline; gap: 6px;">
@@ -1308,7 +1309,15 @@
 
         tbody.innerHTML = walletsData.map(w => `
           <tr>
-            <td><strong>Wallet ${w.index}</strong></td>
+            <td>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <strong id="wallet-label-${w.index}">${w.label || `Wallet ${w.index}`}</strong>
+                <button class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.72rem; box-shadow: none;" onclick="renameWalletPrompt(${w.index}, '${(w.label || '').replace(/'/g, "\\'")}')" title="Rename Wallet">
+                  <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
+                </button>
+              </div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500; margin-top: 2px;">Slot #${w.index}</div>
+            </td>
             <td><code>${w.address}</code></td>
             <td><strong>${w.balanceEth} ETH</strong> <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">(~${w.balanceUsdt || '$0 USDT'})</span></td>
             <td>
@@ -1324,7 +1333,7 @@
             <div class="wallet-select-left">
               <input type="checkbox" class="session-wallet-cb" value="${w.index}" checked>
               <div style="display: flex; align-items: center; gap: 6px;">
-                <span class="wallet-select-title">Wallet ${w.index}</span>
+                <span class="wallet-select-title">${w.label || `Wallet ${w.index}`}</span>
                 <code class="wallet-select-addr">${w.address}</code>
               </div>
             </div>
@@ -1341,7 +1350,7 @@
               <div class="wallet-select-left">
                 <input type="checkbox" class="schedule-wallet-cb" value="${w.index}" checked onchange="updateScheduleSummary()">
                 <div style="display: flex; align-items: center; gap: 6px;">
-                  <span class="wallet-select-title">Wallet ${w.index}</span>
+                  <span class="wallet-select-title">${w.label || `Wallet ${w.index}`}</span>
                   <code class="wallet-select-addr">${w.address}</code>
                 </div>
               </div>
@@ -1359,6 +1368,23 @@
         tbody.innerHTML = '<tr><td colspan="4" style="color: var(--red);">Failed to load wallets.</td></tr>';
         sessionList.innerHTML = '<span style="color: var(--red); font-size: 0.85rem;">Failed to load wallets.</span>';
         if (scheduleList) scheduleList.innerHTML = '<span style="color: var(--red); font-size: 0.85rem;">Failed to load wallets.</span>';
+      }
+    }
+
+    async function renameWalletPrompt(index, currentLabel) {
+      const newName = prompt(`Enter custom name for Wallet ${index}:`, currentLabel || `Wallet ${index}`);
+      if (newName === null) return;
+      try {
+        const res = await fetch(`${API}/wallets/${index}/label`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label: newName.trim() })
+        });
+        const data = await res.json();
+        if (!res.ok) alert(data.error || 'Failed to rename wallet');
+        else fetchWallets();
+      } catch (err) {
+        alert(err);
       }
     }
 
