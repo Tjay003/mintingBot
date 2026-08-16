@@ -688,11 +688,17 @@
           </span>
         </div>
         <form onsubmit="handleAddWallet(event)">
-          <div class="form-group">
-            <label>Private Key (0x...)</label>
-            <input type="password" id="key-input" class="form-control" placeholder="0x..." required>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Wallet Name / Label (Optional)</label>
+              <input type="text" id="label-input" class="form-control" placeholder="e.g. Main Sniper, Burner 1">
+            </div>
+            <div class="form-group">
+              <label>Private Key (0x...)</label>
+              <input type="password" id="key-input" class="form-control" placeholder="0x..." required>
+            </div>
           </div>
-          <button type="submit" class="btn btn-primary">
+          <button type="submit" class="btn btn-primary" style="margin-top: 8px;">
             <i data-lucide="plus-circle"></i> Add Wallet
           </button>
         </form>
@@ -1309,11 +1315,11 @@
 
         tbody.innerHTML = walletsData.map(w => `
           <tr>
-            <td>
+            <td id="wallet-cell-name-${w.index}" data-name="${escapeHtml(w.label || `Wallet ${w.index}`)}">
               <div style="display: flex; align-items: center; gap: 8px;">
-                <strong id="wallet-label-${w.index}">${w.label || `Wallet ${w.index}`}</strong>
-                <button class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.72rem; box-shadow: none;" onclick="renameWalletPrompt(${w.index}, '${(w.label || '').replace(/'/g, "\\'")}')" title="Rename Wallet">
-                  <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
+                <strong id="wallet-label-${w.index}">${escapeHtml(w.label || `Wallet ${w.index}`)}</strong>
+                <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 0.72rem; box-shadow: none;" onclick="startInlineEditWallet(${w.index})" title="Rename Wallet">
+                  <i data-lucide="edit-3" style="width: 13px; height: 13px;"></i>
                 </button>
               </div>
               <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500; margin-top: 2px;">Slot #${w.index}</div>
@@ -1333,7 +1339,7 @@
             <div class="wallet-select-left">
               <input type="checkbox" class="session-wallet-cb" value="${w.index}" checked>
               <div style="display: flex; align-items: center; gap: 6px;">
-                <span class="wallet-select-title">${w.label || `Wallet ${w.index}`}</span>
+                <span class="wallet-select-title">${escapeHtml(w.label || `Wallet ${w.index}`)}</span>
                 <code class="wallet-select-addr">${w.address}</code>
               </div>
             </div>
@@ -1350,7 +1356,7 @@
               <div class="wallet-select-left">
                 <input type="checkbox" class="schedule-wallet-cb" value="${w.index}" checked onchange="updateScheduleSummary()">
                 <div style="display: flex; align-items: center; gap: 6px;">
-                  <span class="wallet-select-title">${w.label || `Wallet ${w.index}`}</span>
+                  <span class="wallet-select-title">${escapeHtml(w.label || `Wallet ${w.index}`)}</span>
                   <code class="wallet-select-addr">${w.address}</code>
                 </div>
               </div>
@@ -1371,40 +1377,72 @@
       }
     }
 
-    async function renameWalletPrompt(index, currentLabel) {
-      const newName = prompt(`Enter custom name for Wallet ${index}:`, currentLabel || `Wallet ${index}`);
-      if (newName === null) return;
+    function startInlineEditWallet(index) {
+      const cell = document.getElementById(`wallet-cell-name-${index}`);
+      if (!cell) return;
+      const currentName = cell.dataset.name || `Wallet ${index}`;
+      cell.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <input type="text" id="inline-wallet-name-${index}" class="form-control" style="padding: 4px 8px; font-size: 0.85rem; font-weight: 700; width: 140px; background: #FFFFFF;" value="${escapeHtml(currentName)}" onkeydown="if(event.key==='Enter') saveInlineWalletName(${index}); if(event.key==='Escape') fetchWallets();">
+          <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.75rem;" onclick="saveInlineWalletName(${index})" title="Save Name">
+            <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+          </button>
+          <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 0.75rem;" onclick="fetchWallets()" title="Cancel">
+            <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+          </button>
+        </div>
+        <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500; margin-top: 2px;">Slot #${index}</div>
+      `;
+      lucide.createIcons();
+      const input = document.getElementById(`inline-wallet-name-${index}`);
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
+
+    async function saveInlineWalletName(index) {
+      const input = document.getElementById(`inline-wallet-name-${index}`);
+      if (!input) return;
+      const newName = input.value.trim();
       try {
         const res = await fetch(`${API}/wallets/${index}/label`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ label: newName.trim() })
+          body: JSON.stringify({ label: newName })
         });
         const data = await res.json();
-        if (!res.ok) alert(data.error || 'Failed to rename wallet');
-        else fetchWallets();
+        if (!res.ok) {
+          alert(data.error || 'Failed to update wallet name');
+        }
+        await fetchWallets();
       } catch (err) {
-        alert(err);
+        alert(String(err));
       }
     }
 
     async function handleAddWallet(e) {
       e.preventDefault();
-      const privateKey = document.getElementById('key-input').value;
+      const privateKey = document.getElementById('key-input').value.trim();
+      const labelInput = document.getElementById('label-input');
+      const label = labelInput ? labelInput.value.trim() : '';
       try {
         const res = await fetch(`${API}/wallets`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ privateKey })
+          body: JSON.stringify({ privateKey, label })
         });
         const data = await res.json();
-        if (!res.ok) alert(data.error);
-        else {
-          alert(`Wallet Added!\nAddress: ${data.address}`);
-          document.getElementById('key-input').value = '';
-          fetchWallets();
+        if (!res.ok) {
+          alert(data.error || 'Failed to add wallet');
+          return;
         }
-      } catch (err) { alert(err); }
+        document.getElementById('key-input').value = '';
+        if (labelInput) labelInput.value = '';
+        fetchWallets();
+      } catch (err) {
+        alert(String(err));
+      }
     }
 
     async function removeWallet(idx) {

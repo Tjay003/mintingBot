@@ -19,6 +19,53 @@ function writeEnvFile(content: string): void {
   writeFileSync(ENV_PATH, content, 'utf-8')
 }
 
+function getNonWalletLines(lines: string[]): string[] {
+  return lines.filter((l) => !l.trim().startsWith('WALLET_KEY_') && !l.trim().startsWith('WALLET_LABEL_'))
+}
+
+function parseEnvWallets(lines: string[]): { key: string; label?: string }[] {
+  const keyMap: Record<number, string> = {}
+  const labelMap: Record<number, string> = {}
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('WALLET_KEY_')) {
+      const match = trimmed.match(/^WALLET_KEY_(\d+)=(.*)$/)
+      if (match) {
+        const slot = parseInt(match[1], 10)
+        const key = match[2].trim()
+        if (key.startsWith('0x') && key.length === 66) {
+          keyMap[slot] = key
+        }
+      }
+    } else if (trimmed.startsWith('WALLET_LABEL_')) {
+      const match = trimmed.match(/^WALLET_LABEL_(\d+)=(.*)$/)
+      if (match) {
+        const slot = parseInt(match[1], 10)
+        const label = match[2].trim()
+        if (label) {
+          labelMap[slot] = label
+        }
+      }
+    }
+  }
+
+  const slots = Object.keys(keyMap).map(Number).sort((a, b) => a - b)
+  return slots.map((slot) => ({ key: keyMap[slot], label: labelMap[slot] }))
+}
+
+function serializeEnvWithWallets(nonWalletLines: string[], wallets: { key: string; label?: string }[]): string {
+  let content = nonWalletLines.join('\n').trim()
+  content += '\n\n# Wallet Private Keys & Labels\n'
+  wallets.forEach((w, i) => {
+    content += `WALLET_KEY_${i + 1}=${w.key}\n`
+    if (w.label) {
+      content += `WALLET_LABEL_${i + 1}=${w.label}\n`
+    }
+  })
+  return content
+}
+
 /** GET /api/wallets — list all wallets with balances & USDT value */
 router.get('/', async (_req, res) => {
   try {
@@ -54,26 +101,21 @@ router.put('/:index/label', (req, res) => {
   try {
     const envContent = readEnvFile()
     const lines = envContent.split('\n')
-    const cleanedLabel = (label || '').trim()
+    const nonWalletLines = getNonWalletLines(lines)
+    const wallets = parseEnvWallets(lines)
 
-    let found = false
-    const newLines = lines.map((l) => {
-      if (l.trim().startsWith(`WALLET_LABEL_${idx}=`)) {
-        found = true
-        return `WALLET_LABEL_${idx}=${cleanedLabel}`
-      }
-      return l
-    })
-
-    if (!found && cleanedLabel) {
-      newLines.push(`WALLET_LABEL_${idx}=${cleanedLabel}`)
+    if (idx > wallets.length) {
+      res.status(404).json({ error: `Wallet ${idx} not found.` })
+      return
     }
 
-    writeEnvFile(newLines.join('\n').trim() + '\n')
+    wallets[idx - 1].label = (label || '').trim() || undefined
+
+    writeEnvFile(serializeEnvWithWallets(nonWalletLines, wallets))
     resetSettings()
     resetWallets()
 
-    res.json({ success: true, index: idx, label: cleanedLabel || `Wallet ${idx}` })
+    res.json({ success: true, index: idx, label: wallets[idx - 1].label || `Wallet ${idx}` })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -81,7 +123,7 @@ router.put('/:index/label', (req, res) => {
 
 /** POST /api/wallets — add a new wallet by private key */
 router.post('/', (req, res) => {
-  const { privateKey } = req.body as { privateKey?: string }
+  const { privateKey, label } = req.body as { privateKey?: string; label?: string }
 
   if (!privateKey || !privateKey.startsWith('0x') || privateKey.length !== 66) {
     res.status(400).json({ error: 'Invalid private key. Must be 0x-prefixed 64-character hex.' })
@@ -90,31 +132,21 @@ router.post('/', (req, res) => {
 
   try {
     const account = privateKeyToAccount(privateKey as `0x${string}`)
-    let envContent = readEnvFile()
-
-    // Collect existing valid keys
+    const envContent = readEnvFile()
     const lines = envContent.split('\n')
-    const nonWalletLines = lines.filter((l) => !l.trim().startsWith('WALLET_KEY_'))
-    const existingKeys = lines
-      .filter((l) => l.trim().startsWith('WALLET_KEY_'))
-      .map((l) => l.split('=')[1]?.trim())
-      .filter((k): k is string => Boolean(k) && k.startsWith('0x') && k.length === 66 && k !== privateKey)
+    const nonWalletLines = getNonWalletLines(lines)
+    const wallets = parseEnvWallets(lines)
 
-    // Add new key
-    existingKeys.push(privateKey)
+    // Check if key already exists
+    if (!wallets.some((w) => w.key.toLowerCase() === privateKey.toLowerCase())) {
+      wallets.push({ key: privateKey, label: (label || '').trim() || undefined })
+    }
 
-    // Rebuild env content
-    let newEnv = nonWalletLines.join('\n').trim()
-    newEnv += '\n\n# Wallet Private Keys\n'
-    existingKeys.forEach((key, i) => {
-      newEnv += `WALLET_KEY_${i + 1}=${key}\n`
-    })
-
-    writeEnvFile(newEnv)
+    writeEnvFile(serializeEnvWithWallets(nonWalletLines, wallets))
     resetSettings()
     resetWallets()
 
-    res.json({ success: true, address: account.address, slot: existingKeys.length })
+    res.json({ success: true, address: account.address, slot: wallets.length })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -131,28 +163,18 @@ router.delete('/:index', (req, res) => {
   try {
     const envContent = readEnvFile()
     const lines = envContent.split('\n')
-    const nonWalletLines = lines.filter((l) => !l.trim().startsWith('WALLET_KEY_'))
-    const walletKeys = lines
-      .filter((l) => l.trim().startsWith('WALLET_KEY_'))
-      .map((l) => l.split('=')[1]?.trim())
-      .filter((k): k is string => Boolean(k) && k.startsWith('0x') && k.length === 66)
+    const nonWalletLines = getNonWalletLines(lines)
+    const wallets = parseEnvWallets(lines)
 
-    if (idx > walletKeys.length) {
+    if (idx > wallets.length) {
       res.status(404).json({ error: `Wallet ${idx} not found.` })
       return
     }
 
-    // Remove key at idx - 1
-    walletKeys.splice(idx - 1, 1)
+    // Remove wallet at idx - 1
+    wallets.splice(idx - 1, 1)
 
-    // Rebuild env content
-    let newEnv = nonWalletLines.join('\n').trim()
-    newEnv += '\n\n# Wallet Private Keys\n'
-    walletKeys.forEach((key, i) => {
-      newEnv += `WALLET_KEY_${i + 1}=${key}\n`
-    })
-
-    writeEnvFile(newEnv)
+    writeEnvFile(serializeEnvWithWallets(nonWalletLines, wallets))
     resetSettings()
     resetWallets()
 

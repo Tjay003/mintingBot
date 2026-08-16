@@ -19,9 +19,10 @@ export function reloadEnvFromDisk(): void {
   try {
     const envConfig = parse(readFileSync(envPath))
 
-    // Clear old WALLET_KEY_ entries from process.env first
+    // Clear old WALLET_KEY_ and WALLET_LABEL_ entries from process.env first
     for (let i = 1; i <= 20; i++) {
       delete process.env[`WALLET_KEY_${i}`]
+      delete process.env[`WALLET_LABEL_${i}`]
     }
 
     // Apply fresh values to process.env
