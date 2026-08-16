@@ -211,6 +211,122 @@ export async function executeParallelMint(
   }))
 }
 
+export interface PreSignedTransaction {
+  wallet: ManagedWallet
+  rawTransaction: `0x${string}`
+  nonce: number
+  value: bigint
+  contractAddress: Address
+}
+
+/**
+ * Pre-sign a raw transaction ahead of time.
+ * Returns the serialized transaction hex string ready for instantaneous broadcast.
+ */
+export async function preSignMintTransaction(
+  publicClient: PublicClient,
+  wallet: ManagedWallet,
+  params: MintParams,
+  nonce: number,
+): Promise<PreSignedTransaction> {
+  const built = await buildMintTransaction(publicClient, wallet, params, nonce)
+
+  const rawTransaction = await wallet.client.signTransaction({
+    account: wallet.client.account!,
+    to: built.contractAddress,
+    data: built.data,
+    value: built.value,
+    gas: built.gas,
+    maxFeePerGas: built.maxFeePerGas,
+    maxPriorityFeePerGas: built.maxPriorityFeePerGas,
+    nonce: built.nonce,
+    chain: wallet.client.chain,
+  })
+
+  return {
+    wallet,
+    rawTransaction,
+    nonce: built.nonce,
+    value: built.value,
+    contractAddress: built.contractAddress,
+  }
+}
+
+/**
+ * Blast a pre-signed transaction to the network via sendRawTransaction.
+ */
+export async function sendRawPreSignedTransaction(
+  publicClient: PublicClient,
+  preSigned: PreSignedTransaction,
+): Promise<{ hash: `0x${string}`; submitDurationMs: number; confirmDurationMs: number; totalDurationMs: number; blockNumber?: bigint }> {
+  const { wallet } = preSigned
+  const ethValue = parseFloat(formatEther(preSigned.value)).toFixed(4)
+  const startTime = performance.now()
+
+  logger.info(`Wallet ${wallet.index} → blasting pre-signed tx (${ethValue} ETH, nonce ${preSigned.nonce})`)
+
+  const sendStartTime = performance.now()
+  const hash = await publicClient.sendRawTransaction({
+    serializedTransaction: preSigned.rawTransaction,
+  })
+  const submitDurationMs = Math.round(performance.now() - sendStartTime)
+
+  logger.info(`Wallet ${wallet.index} → raw tx broadcasted ${hash} (${submitDurationMs}ms)`)
+
+  // Wait for 1 confirmation
+  const confirmStartTime = performance.now()
+  const receipt = await publicClient.waitForTransactionReceipt({ hash, confirmations: 1 })
+  const confirmDurationMs = Math.round(performance.now() - confirmStartTime)
+  const totalDurationMs = Math.round(performance.now() - startTime)
+
+  if (receipt.status === 'success') {
+    logger.success(
+      `Wallet ${wallet.index} → confirmed ✓ block #${receipt.blockNumber} (${confirmDurationMs}ms | total: ${(totalDurationMs / 1000).toFixed(2)}s)`,
+    )
+  } else {
+    logger.error(`Wallet ${wallet.index} → tx REVERTED ${hash} (total: ${(totalDurationMs / 1000).toFixed(2)}s)`)
+    throw new Error(`Transaction reverted: ${hash}`)
+  }
+
+  return {
+    hash,
+    submitDurationMs,
+    confirmDurationMs,
+    totalDurationMs,
+    blockNumber: receipt.blockNumber,
+  }
+}
+
+/**
+ * Blast all pre-signed transactions simultaneously in parallel at T-0.
+ */
+export async function executeParallelRawBlast(
+  publicClient: PublicClient,
+  preSignedTxs: PreSignedTransaction[],
+): Promise<Array<{
+  wallet: ManagedWallet
+  hash?: string
+  error?: string
+  submitDurationMs?: number
+  confirmDurationMs?: number
+  totalDurationMs?: number
+}>> {
+  logger.fire(`⚡ T-0 Blast: Firing ${preSignedTxs.length} pre-signed raw transaction(s) instantly!`)
+
+  const sendResults = await Promise.allSettled(
+    preSignedTxs.map((tx) => sendRawPreSignedTransaction(publicClient, tx)),
+  )
+
+  return sendResults.map((result, i) => ({
+    wallet: preSignedTxs[i].wallet,
+    hash: result.status === 'fulfilled' ? result.value.hash : undefined,
+    error: result.status === 'rejected' ? String(result.reason) : undefined,
+    submitDurationMs: result.status === 'fulfilled' ? result.value.submitDurationMs : undefined,
+    confirmDurationMs: result.status === 'fulfilled' ? result.value.confirmDurationMs : undefined,
+    totalDurationMs: result.status === 'fulfilled' ? result.value.totalDurationMs : undefined,
+  }))
+}
+
 /**
  * Common ERC-721/ERC-1155 mint ABIs.
  * Used when a contract's ABI cannot be fetched (unverified contracts).

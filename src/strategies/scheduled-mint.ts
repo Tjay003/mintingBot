@@ -1,7 +1,10 @@
 import { parseEther, type Address, type Abi } from 'viem'
-import { getPublicClient, loadBalances, filterSolventWallets, getNonce } from '../wallets/manager.js'
+import { getPublicClient, loadBalances, filterSolventWallets, getNonce, type ManagedWallet } from '../wallets/manager.js'
 import {
   executeParallelMint,
+  preSignMintTransaction,
+  executeParallelRawBlast,
+  type PreSignedTransaction,
   COMMON_MINT_ABIS,
   SEADROP_ROUTER_ADDRESS,
   OPENSEA_FEE_RECIPIENT,
@@ -99,31 +102,7 @@ export async function runScheduledMint(opts: ScheduledMintOptions): Promise<void
   const sigKey = `${opts.functionName}(uint256)`
   const resolvedAbi: Abi = opts.abi ?? [COMMON_MINT_ABIS[sigKey] ?? COMMON_MINT_ABIS['mint(uint256)']]
 
-  // Handle Ctrl+C in CLI mode
-  if (!opts.signal) {
-    process.once('SIGINT', () => {
-      logger.warn('\nInterrupted — stopping scheduled mint.')
-      process.exit(0)
-    })
-  }
-
-  // Wait until mint time with countdown & abort handling
-  await sleepUntil(targetTime, opts.signal)
-
-  if (opts.signal?.aborted) {
-    logger.warn('Scheduled mint cancelled before firing.')
-    return
-  }
-
-  logger.divider()
-  logger.fire(`Launching scheduled mint for ${solvent.length} wallet(s) [${solvent.length * opts.quantity} NFTs total]`)
-  for (const w of solvent) {
-    logger.info(`Firing Wallet ${w.index} (${w.address}) | Qty: ${opts.quantity} | Value: ${totalCostEth} ETH | Gas: ${opts.gasStrategy.toUpperCase()}`)
-  }
-
-  // Fetch nonces right at fire time (most accurate)
-  const nonces = await Promise.all(solvent.map((w) => getNonce(w.address)))
-
+  // Setup parameters & SeaDrop routing
   let targetAddress = opts.contractAddress
   let targetAbi = resolvedAbi
   let targetFunctionName = opts.functionName
@@ -142,7 +121,7 @@ export async function runScheduledMint(opts: ScheduledMintOptions): Promise<void
     ]
   }
 
-  const results = await executeParallelMint(publicClient, solvent, {
+  const mintParams = {
     contractAddress: targetAddress,
     abi: targetAbi,
     functionName: targetFunctionName,
@@ -150,7 +129,88 @@ export async function runScheduledMint(opts: ScheduledMintOptions): Promise<void
     valueEth: totalCostEth,
     gasStrategy: opts.gasStrategy,
     customGasPriceGwei: opts.customGasPriceGwei,
-  }, nonces)
+  }
+
+  // Handle Ctrl+C in CLI mode
+  if (!opts.signal) {
+    process.once('SIGINT', () => {
+      logger.warn('\nInterrupted — stopping scheduled mint.')
+      process.exit(0)
+    })
+  }
+
+  // Two-stage execution: Pre-sign at T - 5s, Blast at T - 0s
+  const PRE_SIGN_LEAD_MS = 5000
+  const nowMs = Date.now()
+  const targetMs = targetTime.getTime()
+  const timeUntilTarget = targetMs - nowMs
+
+  let preSignedTxs: PreSignedTransaction[] = []
+
+  if (timeUntilTarget > PRE_SIGN_LEAD_MS) {
+    // Stage 1: Sleep until T - 5 seconds
+    const preSignTime = new Date(targetMs - PRE_SIGN_LEAD_MS)
+    await sleepUntil(preSignTime, opts.signal)
+
+    if (opts.signal?.aborted) {
+      logger.warn('Scheduled mint cancelled before firing.')
+      return
+    }
+
+    // At T - 5s: Fetch nonces and pre-sign all transactions into memory
+    logger.info(`⚡ T-5s Reached: Pre-signing transactions in parallel across ${solvent.length} wallet(s)...`)
+    const nonces = await Promise.all(solvent.map((w) => getNonce(w.address)))
+    const signResults = await Promise.allSettled(
+      solvent.map((w, i) => preSignMintTransaction(publicClient, w, mintParams, nonces[i])),
+    )
+
+    for (let i = 0; i < signResults.length; i++) {
+      const res = signResults[i]
+      if (res.status === 'fulfilled') {
+        preSignedTxs.push(res.value)
+      } else {
+        logger.error(`Wallet ${solvent[i].index} pre-sign failed: ${res.reason}`)
+      }
+    }
+
+    if (preSignedTxs.length === 0) {
+      throw new Error('All transaction pre-signs failed — aborting scheduled mint')
+    }
+
+    logger.success(`⚡ ${preSignedTxs.length} transaction(s) pre-signed into memory — armed and holding for T-0 blast!`)
+  }
+
+  // Stage 2: Sleep until exact target time T - 0s
+  await sleepUntil(targetTime, opts.signal)
+
+  if (opts.signal?.aborted) {
+    logger.warn('Scheduled mint cancelled before firing.')
+    return
+  }
+
+  logger.divider()
+  logger.fire(`Launching scheduled mint for ${solvent.length} wallet(s) [${solvent.length * opts.quantity} NFTs total]`)
+  for (const w of solvent) {
+    logger.info(`Firing Wallet ${w.index} (${w.address}) | Qty: ${opts.quantity} | Value: ${totalCostEth} ETH | Gas: ${opts.gasStrategy.toUpperCase()}`)
+  }
+
+  let results: Array<{
+    wallet: ManagedWallet
+    hash?: string
+    error?: string
+    submitDurationMs?: number
+    confirmDurationMs?: number
+    totalDurationMs?: number
+  }>
+
+  if (preSignedTxs.length > 0) {
+    // Instant raw byte blast with 0 signing latency!
+    results = await executeParallelRawBlast(publicClient, preSignedTxs)
+  } else {
+    // Immediate fallback if scheduled with < 5s remaining
+    const nonces = await Promise.all(solvent.map((w) => getNonce(w.address)))
+    results = await executeParallelMint(publicClient, solvent, mintParams, nonces)
+  }
 
   logger.divider()
   let successCount = 0
