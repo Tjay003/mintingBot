@@ -1,0 +1,65 @@
+# MintBot — Agent Instructions & Executive Project Summary
+
+> **AGENT DIRECTIVE & EXECUTIVE MEMORY**
+> This file is read by AI agents working on MintBot. Maintain all invariants, constraints, and update `CONTEXT.md` on every feature change.
+
+---
+
+## 1. Project Mission & Technology Stack
+- **Target Network:** Robinhood Chain (Arbitrum Orbit L2, Chain ID `4663`)
+- **RPC / WSS:** `https://rpc.mainnet.chain.robinhood.com` | `wss://rpc.mainnet.chain.robinhood.com`
+- **Core Stack:** TypeScript, Node.js (v18+), Viem, Express, WebSocket (`ws`)
+- **Dashboard:** Standalone Vanilla HTML/CSS/JS (Neobrutalist Emerald Green theme `#10B981`, Lucide icons, Inter + JetBrains Mono)
+- **Port:** `http://localhost:3000` (`npm run ui`)
+
+---
+
+## 2. Critical Protocol Invariants (MUST FOLLOW)
+
+1. **OpenSea SeaDrop Drops:**
+   - Canonical SeaDrop Router: `0x00005EA00Ac477B1030CE78506496e8C2dE24bf5`
+   - OpenSea Fee Recipient: `0x0000a26b00c1f0df003000390027140000faa719`
+   - When a contract implements `mintSeaDrop(address,uint256)`, **NEVER** call the NFT contract directly — route through the SeaDrop router via `mintPublic(nftContract, feeRecipient, zeroAddress, quantity)`.
+
+2. **On-Chain Auto Price Detection:**
+   - Query `getPublicDrop(nftContract)` on the SeaDrop router (`0x00005EA00Ac477B1030CE78506496e8C2dE24bf5`) to retrieve exact `mintPrice`, `startTime`, `endTime`, and `maxTotalMintableByWallet`.
+   - Never hardcode prices or assume `0 ETH` without probing on-chain first.
+
+3. **Pre-Signed T-0 Byte Blast for Scheduled Mints:**
+   - At `T - 5s`: Pre-fetch nonces and pre-sign raw EIP-1559 transaction hex (`wallet.client.signTransaction(...)`) into memory.
+   - At `T - 0s`: Immediately broadcast pre-signed raw bytes via `publicClient.sendRawTransaction(...)` across all wallets in parallel.
+
+4. **Multi-Wallet Filtering:**
+   - All strategies and session handlers must respect `selectedWallets` (`walletIndices`) so users only fire the specific wallets checked in the UI.
+
+5. **BigInt Serialization:**
+   - Express cannot serialize raw JavaScript `BigInt`. Always convert BigInts to strings (`toString()`) in `/api/*` responses.
+
+6. **Living Documentation:**
+   - Whenever any feature, strategy, contract address, UI control, or parameter is added or updated, **ALWAYS update [`CONTEXT.md`](file:///C:/Users/Tyrone%20James%20Bacolod/orca/projects/mintingBot/CONTEXT.md)**.
+
+---
+
+## 3. Key File Locations
+
+- **Tx Engine & Pre-Signer:** [`src/core/tx-builder.ts`](file:///C:/Users/Tyrone%20James%20Bacolod/orca/projects/mintingBot/src/core/tx-builder.ts)
+- **Contract & Price Analyzer:** [`src/utils/contract-analyzer.ts`](file:///C:/Users/Tyrone%20James%20Bacolod/orca/projects/mintingBot/src/utils/contract-analyzer.ts)
+- **Mint Strategies:** [`src/strategies/`](file:///C:/Users/Tyrone%20James%20Bacolod/orca/projects/mintingBot/src/strategies/) (`public-mint.ts`, `snipe-mint.ts`, `scheduled-mint.ts`, `whitelist-mint.ts`)
+- **Server API Endpoints:** [`server/api/`](file:///C:/Users/Tyrone%20James%20Bacolod/orca/projects/mintingBot/server/api/) (`session.ts`, `analyze.ts`, `wallets.ts`, `gas.ts`)
+- **Dashboard UI:** [`public/index.html`](file:///C:/Users/Tyrone%20James%20Bacolod/orca/projects/mintingBot/public/index.html)
+- **Full Architecture Memory:** [`CONTEXT.md`](file:///C:/Users/Tyrone%20James%20Bacolod/orca/projects/mintingBot/CONTEXT.md)
+
+---
+
+## 4. Run & Test Commands
+
+```bash
+# Start Web UI Server (port 3000)
+npm run ui
+
+# Run TypeScript Typecheck
+npx tsc --noEmit
+
+# Build production bundle
+npm run build
+```
