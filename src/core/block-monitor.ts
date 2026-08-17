@@ -1,4 +1,5 @@
 import type { PublicClient, Address } from 'viem'
+import { SEADROP_ROUTER_ADDRESS } from './tx-builder.js'
 import { logger } from '../utils/logger.js'
 
 export type SnipeCondition = 'sale-active' | 'not-paused' | 'function-callable'
@@ -15,15 +16,56 @@ const SALE_STATE_ABI = [
   { name: 'paused', type: 'function', inputs: [], outputs: [{ type: 'bool' }], stateMutability: 'view' },
 ] as const
 
+const SEADROP_CHECK_ABI = [
+  {
+    name: 'getPublicDrop',
+    type: 'function',
+    inputs: [{ name: 'nftContract', type: 'address' }],
+    outputs: [
+      {
+        type: 'tuple',
+        components: [
+          { name: 'mintPrice', type: 'uint80' },
+          { name: 'startTime', type: 'uint48' },
+          { name: 'endTime', type: 'uint48' },
+          { name: 'maxTotalMintableByWallet', type: 'uint16' },
+          { name: 'feeBps', type: 'uint16' },
+          { name: 'restrictFeeRecipients', type: 'bool' },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+] as const
+
 /**
  * Try to detect whether a contract's sale is currently active.
- * Probes common boolean state functions.
+ * Probes common boolean state functions and SeaDrop router start times.
  * Returns { active: boolean, functionName: string } or null if unknown.
  */
 export async function detectSaleState(
   publicClient: PublicClient,
   contractAddress: Address,
 ): Promise<{ active: boolean; functionName: string } | null> {
+  // 1. Probe SeaDrop router public drop start time
+  try {
+    const drop = await publicClient.readContract({
+      address: SEADROP_ROUTER_ADDRESS,
+      abi: SEADROP_CHECK_ABI,
+      functionName: 'getPublicDrop',
+      args: [contractAddress],
+    }) as { startTime: number; endTime: number }
+
+    if (drop && drop.startTime > 0) {
+      const nowSec = Math.floor(Date.now() / 1000)
+      const isLive = nowSec >= Number(drop.startTime) && nowSec <= Number(drop.endTime)
+      return { active: isLive, functionName: `SeaDrop:startTime(${drop.startTime})` }
+    }
+  } catch {
+    // Not a SeaDrop drop or getPublicDrop reverted
+  }
+
+  // 2. Probe standard ERC-721/1155 sale state functions
   for (const fn of SALE_STATE_ABI) {
     try {
       const result = await publicClient.readContract({
@@ -41,8 +83,8 @@ export async function detectSaleState(
 }
 
 /**
- * Monitor a contract every new block (via WebSocket) and call onLive()
- * the moment the sale state flips to active.
+ * Monitor a contract every new block (via WebSocket or resilient HTTP polling)
+ * and call onLive() the moment the sale state flips to active.
  *
  * Returns an unsubscribe function — call it to stop watching.
  */
@@ -54,46 +96,72 @@ export function watchForSaleActive(
 ): () => void {
   let fired = false
   let blocksChecked = 0
+  let httpPollInterval: NodeJS.Timeout | null = null
+  let stopped = false
 
   logger.info(`Block monitor started  →  watching ${contractAddress}`)
   logger.info(`Waiting for sale to go live... (checks every block ~250ms)`)
 
-  const unwatch = wsClient.watchBlocks({
-    onBlock: async (block) => {
-      if (fired) return
-      blocksChecked++
+  const checkState = async (blockNum?: bigint | number) => {
+    if (fired || stopped) return
+    blocksChecked++
 
-      logger.block(block.number, `checking sale state...`)
+    if (blockNum) {
+      logger.block(BigInt(blockNum), `checking sale state...`)
+    }
 
-      const state = await detectSaleState(httpClient, contractAddress)
+    const state = await detectSaleState(httpClient, contractAddress)
 
-      if (state === null) {
-        // Can't auto-detect — log and keep watching
-        if (blocksChecked === 1) {
-          logger.warn(`Could not auto-detect sale state function. Will keep watching.`)
-          logger.warn(`If this persists, use --condition with a custom function name.`)
-        }
-        return
+    if (state === null) {
+      if (blocksChecked === 1) {
+        logger.warn(`Could not auto-detect sale state function. Will keep watching.`)
       }
+      return
+    }
 
-      // Print newline after the rolling block status
-      process.stdout.write('\n')
+    if (state.active) {
+      if (fired || stopped) return
+      fired = true
+      logger.success(`Sale is LIVE! (${state.functionName} = true) — FIRING NOW`)
+      await onLive()
+    } else if (blockNum) {
+      logger.block(BigInt(blockNum), `${state.functionName} = false`)
+    }
+  }
 
-      if (state.active) {
-        if (fired) return
-        fired = true
-        logger.success(`Sale is LIVE! (${state.functionName} = true) — FIRING NOW`)
-        await onLive()
-      } else {
-        logger.block(block.number, `${state.functionName} = false`)
-      }
-    },
-    onError: (error) => {
-      logger.error(`Block monitor error: ${error.message}`)
-    },
-  })
+  const startHttpPollingFallback = () => {
+    if (httpPollInterval || stopped) return
+    logger.info(`Switching to high-frequency HTTP block polling (~250ms fallback)...`)
+    httpPollInterval = setInterval(async () => {
+      try {
+        const blockNum = await httpClient.getBlockNumber()
+        await checkState(blockNum)
+      } catch {}
+    }, 250)
+  }
 
-  return unwatch
+  let unwatchWs: (() => void) | null = null
+
+  try {
+    unwatchWs = wsClient.watchBlocks({
+      onBlock: async (block) => {
+        await checkState(block.number)
+      },
+      onError: (error) => {
+        logger.warn(`WSS subscription warning: ${error.message} — falling back to HTTP block polling`)
+        startHttpPollingFallback()
+      },
+    })
+  } catch (err: any) {
+    logger.warn(`WSS connection failed: ${err.message} — using HTTP block polling`)
+    startHttpPollingFallback()
+  }
+
+  return () => {
+    stopped = true
+    if (unwatchWs) unwatchWs()
+    if (httpPollInterval) clearInterval(httpPollInterval)
+  }
 }
 
 /**

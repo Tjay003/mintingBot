@@ -45,6 +45,7 @@ MintBot supports 4 distinct minting archetypes with automatic detection:
 
 ### C. Whitelist & Merkle Proof Drops
 - Supports `mint(uint256,bytes32[])`, `whitelistMint(uint256,bytes32[])`, and signature-based `mint(uint256,bytes)` with local tree generation (`keccak256(walletAddress)`).
+- For OpenSea SeaDrop collections, whitelist/on-chain registered mints are automatically routed to the SeaDrop Router (`0x00005EA00Ac477B1030CE78506496e8C2dE24bf5`).
 
 ### D. Unverified Contract Bytecode Probing
 - When a contract is not verified on Blockscout, the bot probes common 4-byte function selectors and SeaDrop router state directly on-chain.

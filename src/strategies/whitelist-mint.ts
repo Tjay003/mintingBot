@@ -1,6 +1,14 @@
 import { parseEther, type Address, type Abi } from 'viem'
-import { getPublicClient, getWallets, loadBalances, filterSolventWallets, getNonce } from '../wallets/manager.js'
-import { executeParallelMint, COMMON_MINT_ABIS } from '../core/tx-builder.js'
+import { getPublicClient, loadBalances, filterSolventWallets, getNonce } from '../wallets/manager.js'
+import {
+  executeParallelMint,
+  COMMON_MINT_ABIS,
+  SEADROP_ROUTER_ADDRESS,
+  OPENSEA_FEE_RECIPIENT,
+  ZERO_ADDRESS,
+  SEADROP_MINT_PUBLIC_ABI,
+} from '../core/tx-builder.js'
+import { analyzeContract } from '../utils/contract-analyzer.js'
 import { getSettings } from '../config/settings.js'
 import { logger } from '../utils/logger.js'
 import type { GasStrategy } from '../core/gas-manager.js'
@@ -29,52 +37,75 @@ export interface WhitelistMintOptions {
 /**
  * Whitelist mint strategy.
  * Supports three modes:
- *  - merkle-proof: calls mint(quantity, proof[])
+ *  - merkle-proof: calls mint(quantity, proof[]) or SeaDrop allowlist
  *  - signature:    calls mint(quantity, sig)
- *  - on-chain:     calls mint(quantity) — wallet is already registered on-chain
+ *  - on-chain:     calls mint(quantity) or SeaDrop router for registered wallets
  */
 export async function runWhitelistMint(opts: WhitelistMintOptions): Promise<void> {
-  logger.banner()
-  logger.info(`Mode: Whitelist Mint (${opts.wlMode})`)
-  logger.info(`Contract: ${opts.contractAddress}`)
-  logger.info(`Price: ${opts.priceEth} ETH × ${opts.quantity} per wallet`)
-  logger.info(`Gas strategy: ${opts.gasStrategy}`)
-  logger.divider()
-
   const publicClient = getPublicClient()
   const settings = getSettings()
 
-  // Resolve mint function + ABI based on WL mode
-  let functionName: string
-  let resolvedAbi: Abi
-  let args: unknown[]
+  // Analyze contract to check if it is OpenSea SeaDrop & detect price
+  const analysis = await analyzeContract(publicClient, opts.contractAddress)
+  const isSeaDrop = Boolean(analysis.isSeaDrop)
 
-  if (opts.wlMode === 'merkle-proof') {
+  let effectivePriceEth = opts.priceEth?.trim()
+  if (!effectivePriceEth || effectivePriceEth.toLowerCase() === 'auto' || (parseFloat(effectivePriceEth) === 0 && analysis.mintPriceEth && parseFloat(analysis.mintPriceEth) > 0)) {
+    if (analysis.mintPriceEth) {
+      effectivePriceEth = analysis.mintPriceEth
+      logger.info(`Auto-detected SeaDrop mint price: ${effectivePriceEth} ETH`)
+    }
+  }
+
+  logger.banner()
+  logger.info(`Mode: Whitelist Mint (${opts.wlMode})`)
+  logger.info(`Contract: ${opts.contractAddress}`)
+  logger.info(`Price: ${effectivePriceEth} ETH × ${opts.quantity} per wallet`)
+  logger.info(`Gas strategy: ${opts.gasStrategy}`)
+  logger.divider()
+
+  let targetAddress: Address = opts.contractAddress
+  let targetAbi: Abi
+  let targetFunctionName: string
+  let targetArgs: unknown[]
+
+  if (isSeaDrop) {
+    logger.info(`Detected OpenSea SeaDrop launchpad — routing whitelist mint via SeaDrop Router`)
+    targetAddress = SEADROP_ROUTER_ADDRESS
+    targetAbi = SEADROP_MINT_PUBLIC_ABI
+    targetFunctionName = 'mintPublic'
+    targetArgs = [
+      opts.contractAddress,
+      OPENSEA_FEE_RECIPIENT,
+      ZERO_ADDRESS,
+      BigInt(opts.quantity),
+    ]
+  } else if (opts.wlMode === 'merkle-proof') {
     if (!opts.merkleProof || opts.merkleProof.length === 0) {
       throw new Error('Merkle proof is required for merkle-proof WL mode. Use --proof <json>.')
     }
-    functionName = opts.functionName ?? 'mint'
-    const sigKey = `${functionName}(uint256,bytes32[])`
-    resolvedAbi = opts.abi ?? [COMMON_MINT_ABIS[sigKey] ?? COMMON_MINT_ABIS['mint(uint256,bytes32[])']]
-    args = [BigInt(opts.quantity), opts.merkleProof]
+    targetFunctionName = opts.functionName ?? 'mint'
+    const sigKey = `${targetFunctionName}(uint256,bytes32[])`
+    targetAbi = opts.abi ?? [COMMON_MINT_ABIS[sigKey] ?? COMMON_MINT_ABIS['mint(uint256,bytes32[])']]
+    targetArgs = [BigInt(opts.quantity), opts.merkleProof]
 
   } else if (opts.wlMode === 'signature') {
     if (!opts.signature) {
       throw new Error('Signature is required for signature-based WL mode. Use --signature <hex>.')
     }
-    functionName = opts.functionName ?? 'mint'
-    resolvedAbi = opts.abi ?? [COMMON_MINT_ABIS['mint(uint256,bytes)']]
-    args = [BigInt(opts.quantity), opts.signature]
+    targetFunctionName = opts.functionName ?? 'mint'
+    targetAbi = opts.abi ?? [COMMON_MINT_ABIS['mint(uint256,bytes)']]
+    targetArgs = [BigInt(opts.quantity), opts.signature]
 
   } else {
     // on-chain: wallet is already registered, just call mint(quantity)
-    functionName = opts.functionName ?? 'mint'
-    const sigKey = `${functionName}(uint256)`
-    resolvedAbi = opts.abi ?? [COMMON_MINT_ABIS[sigKey] ?? COMMON_MINT_ABIS['mint(uint256)']]
-    args = [BigInt(opts.quantity)]
+    targetFunctionName = opts.functionName ?? 'mint'
+    const sigKey = `${targetFunctionName}(uint256)`
+    targetAbi = opts.abi ?? [COMMON_MINT_ABIS[sigKey] ?? COMMON_MINT_ABIS['mint(uint256)']]
+    targetArgs = [BigInt(opts.quantity)]
   }
 
-  const totalCostEth = (parseFloat(opts.priceEth) * opts.quantity).toString()
+  const totalCostEth = (parseFloat(effectivePriceEth) * opts.quantity).toString()
   const totalCostWei = parseEther(totalCostEth)
 
   const wallets = await loadBalances(true, false, opts.walletIndices)
@@ -96,10 +127,10 @@ export async function runWhitelistMint(opts: WhitelistMintOptions): Promise<void
   logger.fire(`WL minting from ${solvent.length} wallet(s)...`)
 
   const results = await executeParallelMint(publicClient, solvent, {
-    contractAddress: opts.contractAddress,
-    abi: resolvedAbi,
-    functionName,
-    args,
+    contractAddress: targetAddress,
+    abi: targetAbi,
+    functionName: targetFunctionName,
+    args: targetArgs,
     valueEth: totalCostEth,
     gasStrategy: opts.gasStrategy,
     customGasPriceGwei: opts.customGasPriceGwei,
@@ -109,7 +140,8 @@ export async function runWhitelistMint(opts: WhitelistMintOptions): Promise<void
   let successCount = 0
   for (const r of results) {
     if (r.hash) {
-      logger.success(`Wallet ${r.wallet.index} ✓  ${r.hash}`)
+      const timingStr = r.totalDurationMs ? ` (took ${(r.totalDurationMs / 1000).toFixed(2)}s)` : ''
+      logger.success(`Wallet ${r.wallet.index} ✓  ${r.hash}${timingStr}`)
       successCount++
     } else {
       logger.error(`Wallet ${r.wallet.index} ✗  ${r.error}`)
