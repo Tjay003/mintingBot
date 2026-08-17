@@ -9,6 +9,7 @@ import {
   SEADROP_MINT_PUBLIC_ABI,
 } from '../core/tx-builder.js'
 import { analyzeContract } from '../utils/contract-analyzer.js'
+import { processAutoTransfer } from '../utils/nft-sweeper.js'
 import { getSettings } from '../config/settings.js'
 import { logger } from '../utils/logger.js'
 import type { GasStrategy } from '../core/gas-manager.js'
@@ -32,6 +33,8 @@ export interface WhitelistMintOptions {
   gasStrategy: GasStrategy
   customGasPriceGwei?: number
   walletIndices?: number[]
+  /** Optional cold vault address to sweep minted NFTs to */
+  autoTransferVault?: Address
 }
 
 /**
@@ -138,11 +141,24 @@ export async function runWhitelistMint(opts: WhitelistMintOptions): Promise<void
 
   logger.divider()
   let successCount = 0
+  const vaultRecipient = opts.autoTransferVault || settings.recipientAddress || settings.autoTransferVault
+
   for (const r of results) {
     if (r.hash) {
       const timingStr = r.totalDurationMs ? ` (took ${(r.totalDurationMs / 1000).toFixed(2)}s)` : ''
       logger.success(`Wallet ${r.wallet.index} ✓  ${r.hash}${timingStr}`)
       successCount++
+
+      // Execute auto-transfer if recipient / cold vault address is specified
+      if (vaultRecipient && r.receipt) {
+        await processAutoTransfer(
+          r.wallet,
+          publicClient,
+          opts.contractAddress,
+          vaultRecipient,
+          r.receipt,
+        )
+      }
     } else {
       logger.error(`Wallet ${r.wallet.index} ✗  ${r.error}`)
     }

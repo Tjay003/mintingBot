@@ -6,6 +6,7 @@ import {
   type AbiFunction,
   type Address,
   type PublicClient,
+  type TransactionReceipt,
 } from 'viem'
 import type { ManagedWallet } from '../wallets/manager.js'
 import { estimateGasParams, type GasStrategy } from './gas-manager.js'
@@ -107,7 +108,7 @@ export async function buildMintTransaction(
 export async function sendTransaction(
   publicClient: PublicClient,
   tx: BuiltTransaction,
-): Promise<{ hash: `0x${string}`; submitDurationMs: number; confirmDurationMs: number; totalDurationMs: number; blockNumber?: bigint }> {
+): Promise<{ hash: `0x${string}`; submitDurationMs: number; confirmDurationMs: number; totalDurationMs: number; blockNumber?: bigint; receipt?: TransactionReceipt }> {
   const { wallet } = tx
   const ethValue = parseFloat(formatEther(tx.value)).toFixed(4)
   const startTime = performance.now()
@@ -151,6 +152,7 @@ export async function sendTransaction(
     confirmDurationMs,
     totalDurationMs,
     blockNumber: receipt.blockNumber,
+    receipt,
   }
 }
 
@@ -170,6 +172,7 @@ export async function executeParallelMint(
   submitDurationMs?: number
   confirmDurationMs?: number
   totalDurationMs?: number
+  receipt?: TransactionReceipt
 }>> {
   const overallStart = performance.now()
 
@@ -208,6 +211,7 @@ export async function executeParallelMint(
     submitDurationMs: result.status === 'fulfilled' ? result.value.submitDurationMs : undefined,
     confirmDurationMs: result.status === 'fulfilled' ? result.value.confirmDurationMs : undefined,
     totalDurationMs: result.status === 'fulfilled' ? result.value.totalDurationMs : undefined,
+    receipt: result.status === 'fulfilled' ? result.value.receipt : undefined,
   }))
 }
 
@@ -258,7 +262,7 @@ export async function preSignMintTransaction(
 export async function sendRawPreSignedTransaction(
   publicClient: PublicClient,
   preSigned: PreSignedTransaction,
-): Promise<{ hash: `0x${string}`; submitDurationMs: number; confirmDurationMs: number; totalDurationMs: number; blockNumber?: bigint }> {
+): Promise<{ hash: `0x${string}`; submitDurationMs: number; confirmDurationMs: number; totalDurationMs: number; blockNumber?: bigint; receipt?: TransactionReceipt }> {
   const { wallet } = preSigned
   const ethValue = parseFloat(formatEther(preSigned.value)).toFixed(4)
   const startTime = performance.now()
@@ -294,6 +298,7 @@ export async function sendRawPreSignedTransaction(
     confirmDurationMs,
     totalDurationMs,
     blockNumber: receipt.blockNumber,
+    receipt,
   }
 }
 
@@ -310,6 +315,7 @@ export async function executeParallelRawBlast(
   submitDurationMs?: number
   confirmDurationMs?: number
   totalDurationMs?: number
+  receipt?: TransactionReceipt
 }>> {
   logger.fire(`⚡ T-0 Blast: Firing ${preSignedTxs.length} pre-signed raw transaction(s) instantly!`)
 
@@ -324,6 +330,7 @@ export async function executeParallelRawBlast(
     submitDurationMs: result.status === 'fulfilled' ? result.value.submitDurationMs : undefined,
     confirmDurationMs: result.status === 'fulfilled' ? result.value.confirmDurationMs : undefined,
     totalDurationMs: result.status === 'fulfilled' ? result.value.totalDurationMs : undefined,
+    receipt: result.status === 'fulfilled' ? result.value.receipt : undefined,
   }))
 }
 

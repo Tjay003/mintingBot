@@ -94,6 +94,9 @@ export interface Settings {
   rpc: { http: string; wss: string; isPrivate: boolean }
   walletKeys: `0x${string}`[]
   walletLabels: Record<number, string>
+  recipientAddress?: `0x${string}`
+  autoTransferVault?: `0x${string}`
+  sponsorKey?: `0x${string}`
   safety: {
     maxGasPriceGwei: number
     maxEthPerMint: number
@@ -111,11 +114,16 @@ export function getSettings(): Settings {
 
   const walletKeys = loadWalletKeys()
   const walletLabels = loadWalletLabels()
+  const recipient = optionalEnv('RECIPIENT_ADDRESS') || optionalEnv('VAULT_ADDRESS')
+  const sponsor = optionalEnv('SPONSOR_KEY')
 
   _settings = {
     rpc: resolveRpc(),
     walletKeys,
     walletLabels,
+    recipientAddress: recipient && recipient.startsWith('0x') && recipient.length === 42 ? (recipient as `0x${string}`) : undefined,
+    autoTransferVault: recipient && recipient.startsWith('0x') && recipient.length === 42 ? (recipient as `0x${string}`) : undefined,
+    sponsorKey: sponsor && sponsor.startsWith('0x') && sponsor.length === 66 ? (sponsor as `0x${string}`) : undefined,
     safety: {
       maxGasPriceGwei: parseGwei('MAX_GAS_PRICE_GWEI', 50),
       maxEthPerMint: parseEth('MAX_ETH_PER_MINT', 0.5),

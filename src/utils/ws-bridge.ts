@@ -28,6 +28,7 @@ export interface WsSessionEvent {
   gasStrategy?: string
   mintTime?: string
   selectedWallets?: number[]
+  autoTransferVault?: string
   error?: string
 }
 

@@ -20,6 +20,7 @@ export interface SessionState {
   gasStrategy?: string
   mintTime?: string
   selectedWallets?: number[]
+  autoTransferVault?: string
 }
 
 const state: SessionState = {
@@ -46,6 +47,7 @@ export function setSession(patch: Partial<SessionState>): void {
     gasStrategy: state.gasStrategy,
     mintTime: state.mintTime,
     selectedWallets: state.selectedWallets,
+    autoTransferVault: state.autoTransferVault,
     error: state.error,
   })
 }
@@ -66,6 +68,7 @@ export function resetSession(): void {
   state.gasStrategy = undefined
   state.mintTime = undefined
   state.selectedWallets = undefined
+  state.autoTransferVault = undefined
   broadcastSession({ status: 'idle' })
 }
 

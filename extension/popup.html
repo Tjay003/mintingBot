@@ -74,13 +74,27 @@
           </div>
         </div>
 
+        <!-- Auto-Transfer to Vault -->
+        <div class="form-group" style="padding: 8px; background: #F8FAFC; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px;">
+          <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 11px; font-weight: 600;">
+            <span style="display: flex; align-items: center; gap: 6px;">
+              <input type="checkbox" id="snipe-auto-transfer" />
+              <span>Auto-Transfer / Cold Vault Sweeper</span>
+            </span>
+            <span class="badge badge-green" style="font-size: 8px;">OSNM-Z</span>
+          </label>
+          <div id="snipe-vault-container" style="display: none; margin-top: 6px;">
+            <input type="text" id="snipe-vault-address" class="input" placeholder="Vault Recipient Address (0x...)" style="font-size: 10px; font-family: var(--font-mono);" />
+          </div>
+        </div>
+
         <!-- Wallets Selection -->
         <div class="form-group">
           <div class="label">
             <span>Select Active Wallets</span>
             <span id="snipe-toggle-wallets" style="color: var(--accent-dark); font-size: 10px; cursor: pointer;">Toggle All</span>
           </div>
-          <div id="snipe-wallets-list" style="max-height: 110px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 4px; background: #FAFAFA;">
+          <div id="snipe-wallets-list" style="max-height: 100px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 4px; background: #FAFAFA;">
             <div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 6px;">Loading wallets...</div>
           </div>
         </div>
@@ -146,12 +160,26 @@
           </div>
         </div>
 
+        <!-- Auto-Transfer to Vault -->
+        <div class="form-group" style="padding: 8px; background: #F8FAFC; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px;">
+          <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 11px; font-weight: 600;">
+            <span style="display: flex; align-items: center; gap: 6px;">
+              <input type="checkbox" id="sched-auto-transfer" />
+              <span>Auto-Transfer / Cold Vault Sweeper</span>
+            </span>
+            <span class="badge badge-green" style="font-size: 8px;">OSNM-Z</span>
+          </label>
+          <div id="sched-vault-container" style="display: none; margin-top: 6px;">
+            <input type="text" id="sched-vault-address" class="input" placeholder="Vault Recipient Address (0x...)" style="font-size: 10px; font-family: var(--font-mono);" />
+          </div>
+        </div>
+
         <div class="form-group">
           <div class="label">
             <span>Selected Wallets</span>
             <span id="sched-toggle-wallets" style="color: var(--accent-dark); font-size: 10px; cursor: pointer;">Toggle All</span>
           </div>
-          <div id="sched-wallets-list" style="max-height: 100px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 4px; background: #FAFAFA;"></div>
+          <div id="sched-wallets-list" style="max-height: 90px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 4px; background: #FAFAFA;"></div>
         </div>
 
         <!-- Summary -->
@@ -168,6 +196,42 @@
 
     <!-- TAB 3: WALLETS -->
     <div id="tab-wallets" class="tab-pane">
+      <!-- Multicall3 1-Tx Batch Funder (from OSNM-Z) -->
+      <div class="card" style="border-left: 3px solid var(--accent-dark);">
+        <div class="label" style="margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+          <span>⚡ Multicall3 1-Tx Batch Funder</span>
+          <span class="badge badge-green" style="font-size: 8px;">1-TX ATOMIC</span>
+        </div>
+        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 8px;">
+          Fund all burner wallets atomically from Master Wallet 1 via Multicall3.
+        </div>
+        <div class="grid-2" style="margin-bottom: 6px;">
+          <input type="text" id="fund-amount-input" class="input" placeholder="ETH per Wallet (e.g. 0.005)" value="0.005" />
+          <button id="batch-fund-btn" class="btn btn-primary btn-sm" style="font-size: 11px;">
+            <span>⚡ Disperse ETH</span>
+          </button>
+        </div>
+        <div id="batch-fund-status" style="font-size: 10px; color: var(--text-muted);"></div>
+      </div>
+
+      <!-- Sweep ETH Dust (from OSNM-Z) -->
+      <div class="card">
+        <div class="label" style="margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+          <span>💸 Sweep Native ETH Dust</span>
+          <span class="badge badge-amber" style="font-size: 8px;">WITHDRAW</span>
+        </div>
+        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 8px;">
+          Withdraw remaining ETH dust from all burner wallets back to your Cold Vault address.
+        </div>
+        <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+          <input type="text" id="sweep-vault-input" class="input" placeholder="Cold Vault Address (0x...)" style="flex: 1; font-size: 10px; font-family: var(--font-mono);" />
+          <button id="sweep-funds-btn" class="btn btn-outline btn-sm" style="font-size: 11px;">
+            <span>Sweep All</span>
+          </button>
+        </div>
+        <div id="sweep-funds-status" style="font-size: 10px; color: var(--text-muted);"></div>
+      </div>
+
       <!-- Add Wallet Card -->
       <div class="card">
         <div class="label" style="margin-bottom: 8px;">Add New Wallet</div>
@@ -240,7 +304,8 @@
           <p>• Max ETH Per Mint: <strong>0.05 ETH</strong></p>
           <p>• Max Total Spend: <strong>0.50 ETH</strong></p>
           <p>• Gas Cap Limit: <strong>100.0 Gwei</strong></p>
-          <p>• Parallel Execution: <strong>Sub-50ms Promise.allSettled</strong></p>
+          <p>• Multicall3 Batch Funding: <strong>0xcA11...CA11</strong></p>
+          <p>• Auto-Vault Sweeper: <strong>Active</strong></p>
         </div>
       </div>
     </div>

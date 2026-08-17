@@ -5,6 +5,7 @@
 const API = 'http://localhost:3000/api'
 let walletsData = []
 let currentEthPriceUsdt = 1900
+let defaultRecipientAddress = ''
 let pollSessionTimer = null
 let analyzeDebounceTimer = null
 
@@ -86,6 +87,22 @@ async function refreshCore() {
     updateCoreStatus(true, data.walletsCount)
     walletsData = data.wallets || []
     currentEthPriceUsdt = data.ethPriceUsdt || currentEthPriceUsdt
+    defaultRecipientAddress = data.recipientAddress || defaultRecipientAddress
+
+    // Populate vault fields if empty
+    const snipeVault = document.getElementById('snipe-vault-address')
+    const schedVault = document.getElementById('sched-vault-address')
+    const sweepVault = document.getElementById('sweep-vault-input')
+
+    if (snipeVault && !snipeVault.value && defaultRecipientAddress) {
+      snipeVault.value = defaultRecipientAddress
+    }
+    if (schedVault && !schedVault.value && defaultRecipientAddress) {
+      schedVault.value = defaultRecipientAddress
+    }
+    if (sweepVault && !sweepVault.value && defaultRecipientAddress) {
+      sweepVault.value = defaultRecipientAddress
+    }
 
     renderSnipeWallets()
     renderScheduleWallets()
@@ -120,6 +137,14 @@ function initSnipeTab() {
   const stopBtn = document.getElementById('snipe-stop-btn')
   const toggleWallets = document.getElementById('snipe-toggle-wallets')
   const targetInput = document.getElementById('snipe-target')
+  const autoTransferCb = document.getElementById('snipe-auto-transfer')
+  const vaultContainer = document.getElementById('snipe-vault-container')
+
+  if (autoTransferCb && vaultContainer) {
+    autoTransferCb.addEventListener('change', () => {
+      vaultContainer.style.display = autoTransferCb.checked ? 'block' : 'none'
+    })
+  }
 
   if (toggleWallets) {
     toggleWallets.addEventListener('click', () => {
@@ -160,6 +185,10 @@ function initSnipeTab() {
       const gasStrategy = document.getElementById('snipe-gas')?.value
       const quantity = parseInt(document.getElementById('snipe-qty')?.value || '1', 10)
       const priceEth = document.getElementById('snipe-price')?.value || '0'
+      const autoTransfer = document.getElementById('snipe-auto-transfer')?.checked
+      const autoTransferVault = autoTransfer
+        ? document.getElementById('snipe-vault-address')?.value.trim()
+        : undefined
 
       const selectedWallets = Array.from(
         document.querySelectorAll('.snipe-wallet-cb:checked'),
@@ -184,6 +213,7 @@ function initSnipeTab() {
             quantity,
             priceEth,
             selectedWallets: selectedWallets.length > 0 ? selectedWallets : undefined,
+            autoTransferVault,
           }),
         })
         const json = await res.json()
@@ -248,7 +278,8 @@ function checkActiveSession(session) {
   if (session && session.status === 'running') {
     if (card) card.style.display = 'block'
     if (stopBtn) stopBtn.style.display = 'inline-flex'
-    if (info) info.innerHTML = `Running <strong>${session.mode}</strong> on <code>${session.target.slice(0, 30)}...</code>`
+    const vaultNote = session.autoTransferVault ? ` | 🏛️ Vault: ${session.autoTransferVault.slice(0, 8)}...` : ''
+    if (info) info.innerHTML = `Running <strong>${session.mode}</strong> on <code>${session.target.slice(0, 24)}...</code>${vaultNote}`
     if (!pollSessionTimer) pollSessionTimer = setInterval(pollSession, 1000)
   } else {
     if (stopBtn) stopBtn.style.display = 'none'
@@ -265,11 +296,11 @@ async function pollSession() {
     const data = await res.json()
     const card = document.getElementById('snipe-session-card')
     const info = document.getElementById('snipe-session-info')
-    const logBox = document.getElementById('snipe-log-box')
 
     if (data.status === 'running') {
       if (card) card.style.display = 'block'
-      if (info) info.innerHTML = `Status: <span class="badge badge-green">RUNNING</span> | Target: <code>${data.target}</code>`
+      const vaultNote = data.autoTransferVault ? ` | 🏛️ Vault: ${data.autoTransferVault.slice(0, 8)}...` : ''
+      if (info) info.innerHTML = `Status: <span class="badge badge-green">RUNNING</span> | Target: <code>${data.target}</code>${vaultNote}`
     } else if (data.status === 'success') {
       if (info) info.innerHTML = `Status: <span class="badge badge-green">COMPLETED ✓</span>`
     } else if (data.status === 'error') {
@@ -287,6 +318,14 @@ function initScheduleTab() {
   const qtyInput = document.getElementById('sched-qty')
   const priceInput = document.getElementById('sched-price')
   const submitBtn = document.getElementById('sched-submit-btn')
+  const autoTransferCb = document.getElementById('sched-auto-transfer')
+  const vaultContainer = document.getElementById('sched-vault-container')
+
+  if (autoTransferCb && vaultContainer) {
+    autoTransferCb.addEventListener('change', () => {
+      vaultContainer.style.display = autoTransferCb.checked ? 'block' : 'none'
+    })
+  }
 
   if (targetInput) {
     targetInput.addEventListener('input', () => {
@@ -313,6 +352,10 @@ function initScheduleTab() {
       const quantity = parseInt(document.getElementById('sched-qty')?.value || '1', 10)
       const priceEth = document.getElementById('sched-price')?.value || '0'
       const gasStrategy = document.getElementById('sched-gas')?.value
+      const autoTransfer = document.getElementById('sched-auto-transfer')?.checked
+      const autoTransferVault = autoTransfer
+        ? document.getElementById('sched-vault-address')?.value.trim()
+        : undefined
 
       const selectedWallets = Array.from(
         document.querySelectorAll('.sched-wallet-cb:checked'),
@@ -338,13 +381,13 @@ function initScheduleTab() {
             priceEth,
             gasStrategy,
             selectedWallets: selectedWallets.length > 0 ? selectedWallets : undefined,
+            autoTransferVault,
           }),
         })
         const json = await res.json()
         if (!res.ok) alert(json.error)
         else {
           alert('✓ Scheduled Mint Armed! The bot will execute T-0 pre-signed blast at drop time.')
-          // Switch to Snipe tab to see status
           document.querySelector('[data-tab="tab-snipe"]')?.click()
         }
       } catch (err) {
@@ -481,10 +524,13 @@ function updateScheduleSummary() {
 }
 
 // ==========================================
-// 6. WALLETS TAB
+// 6. WALLETS TAB (Multicall3 & Sweep)
 // ==========================================
 function initWalletsManager() {
   const addBtn = document.getElementById('add-wallet-btn')
+  const fundBtn = document.getElementById('batch-fund-btn')
+  const sweepBtn = document.getElementById('sweep-funds-btn')
+
   if (addBtn) {
     addBtn.addEventListener('click', async () => {
       const label = document.getElementById('add-wallet-label')?.value.trim()
@@ -513,6 +559,89 @@ function initWalletsManager() {
         alert(err.message)
       } finally {
         addBtn.disabled = false
+      }
+    })
+  }
+
+  // Multicall3 1-Tx Batch Funder
+  if (fundBtn) {
+    fundBtn.addEventListener('click', async () => {
+      const amountEth = document.getElementById('fund-amount-input')?.value.trim()
+      const statusEl = document.getElementById('batch-fund-status')
+      if (!amountEth || parseFloat(amountEth) <= 0) {
+        alert('Please enter a valid ETH amount per wallet (e.g. 0.005).')
+        return
+      }
+
+      fundBtn.disabled = true
+      fundBtn.innerHTML = '<span>⚡ Dispersing 1-Tx...</span>'
+      if (statusEl) statusEl.innerHTML = '<span style="color: var(--accent-dark);">Broadcasting Multicall3 transaction...</span>'
+
+      try {
+        const res = await fetch(`${API}/wallets/fund-batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amountEthPerWallet: amountEth }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          if (statusEl) statusEl.innerHTML = `<span style="color: var(--danger);">Failed: ${data.error}</span>`
+          alert(`Funding Failed: ${data.error}`)
+        } else {
+          if (statusEl) {
+            statusEl.innerHTML = `<span style="color: var(--accent-dark);">✓ Multicall3 Funded ${data.walletsFunded} Wallets (${data.totalEthDistributed} ETH) in 1 Tx!</span>`
+          }
+          alert(`✓ 1-Tx Multicall3 Successful! Distributed ${data.totalEthDistributed} ETH across ${data.walletsFunded} wallets.`)
+          refreshCore()
+        }
+      } catch (err) {
+        if (statusEl) statusEl.innerHTML = `<span style="color: var(--danger);">${err.message}</span>`
+      } finally {
+        fundBtn.disabled = false
+        fundBtn.innerHTML = '<span>⚡ Disperse ETH</span>'
+      }
+    })
+  }
+
+  // Sweep Native ETH Dust
+  if (sweepBtn) {
+    sweepBtn.addEventListener('click', async () => {
+      const recipientAddress = document.getElementById('sweep-vault-input')?.value.trim()
+      const statusEl = document.getElementById('sweep-funds-status')
+      if (!recipientAddress || !recipientAddress.startsWith('0x') || recipientAddress.length !== 42) {
+        alert('Please enter a valid 0x 40-character Cold Vault address.')
+        return
+      }
+
+      if (!confirm(`Sweep all remaining ETH dust from burner wallets to ${recipientAddress}?`)) return
+
+      sweepBtn.disabled = true
+      sweepBtn.innerHTML = '<span>Sweeping...</span>'
+      if (statusEl) statusEl.innerHTML = '<span>Sweeping balances...</span>'
+
+      try {
+        const res = await fetch(`${API}/wallets/sweep`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipientAddress }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          if (statusEl) statusEl.innerHTML = `<span style="color: var(--danger);">Failed: ${data.error}</span>`
+          alert(`Sweep Failed: ${data.error}`)
+        } else {
+          const sweptCount = data.results?.filter((r) => r.hash && !r.error)?.length || 0
+          if (statusEl) {
+            statusEl.innerHTML = `<span style="color: var(--accent-dark);">✓ Swept from ${sweptCount} wallets to vault!</span>`
+          }
+          alert(`✓ Swept ETH dust from ${sweptCount} wallets back to ${recipientAddress}!`)
+          refreshCore()
+        }
+      } catch (err) {
+        if (statusEl) statusEl.innerHTML = `<span style="color: var(--danger);">${err.message}</span>`
+      } finally {
+        sweepBtn.disabled = false
+        sweepBtn.innerHTML = '<span>Sweep All</span>'
       }
     })
   }

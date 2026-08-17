@@ -184,4 +184,92 @@ router.delete('/:index', (req, res) => {
   }
 })
 
+/** POST /api/wallets/fund-batch — 1-Tx Multicall3 Batch Wallet Funder */
+router.post('/fund-batch', async (req, res) => {
+  const {
+    funderIndex,
+    funderPrivateKey,
+    amountEthPerWallet,
+    targetWalletIndices,
+  } = req.body as {
+    funderIndex?: number
+    funderPrivateKey?: string
+    amountEthPerWallet?: string
+    targetWalletIndices?: number[]
+  }
+
+  if (!amountEthPerWallet || parseFloat(amountEthPerWallet) <= 0) {
+    res.status(400).json({ error: 'Valid amountEthPerWallet (e.g. "0.005") is required.' })
+    return
+  }
+
+  try {
+    const { batchFundWallets } = await import('../../src/wallets/funder.js')
+    const wallets = getWallets()
+
+    let funderWallet = undefined
+    if (funderIndex && funderIndex >= 1 && funderIndex <= wallets.length) {
+      funderWallet = wallets[funderIndex - 1]
+    }
+
+    const result = await batchFundWallets({
+      funderWallet,
+      funderPrivateKey: funderPrivateKey as `0x${string}` | undefined,
+      amountEthPerWallet: String(amountEthPerWallet),
+      targetWalletIndices,
+    })
+
+    res.json({ success: true, ...result })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+/** POST /api/wallets/sweep — Sweep all native ETH dust from burner wallets back to recipient */
+router.post('/sweep', async (req, res) => {
+  const { recipientAddress, walletIndices } = req.body as {
+    recipientAddress?: string
+    walletIndices?: number[]
+  }
+
+  const settings = (await import('../../src/config/settings.js')).getSettings()
+  const targetRecipient = recipientAddress || settings.recipientAddress || settings.autoTransferVault
+
+  if (!targetRecipient || !targetRecipient.startsWith('0x') || targetRecipient.length !== 42) {
+    res.status(400).json({ error: 'Valid 0x recipientAddress is required for sweep.' })
+    return
+  }
+
+  try {
+    const { sweepNativeEthBalances } = await import('../../src/wallets/funder.js')
+    const results = await sweepNativeEthBalances(
+      targetRecipient as `0x${string}`,
+      walletIndices,
+    )
+    res.json({ success: true, recipient: targetRecipient, results })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+/** PUT /api/wallets/recipient — Set cold vault / recipient address */
+router.put('/recipient', (req, res) => {
+  const { recipientAddress } = req.body as { recipientAddress?: string }
+  if (!recipientAddress || !recipientAddress.startsWith('0x') || recipientAddress.length !== 42) {
+    res.status(400).json({ error: 'Valid 0x 40-character recipient address required.' })
+    return
+  }
+
+  try {
+    const envContent = readEnvFile()
+    const lines = envContent.split('\n').filter((l) => !l.trim().startsWith('RECIPIENT_ADDRESS='))
+    lines.push(`RECIPIENT_ADDRESS=${recipientAddress.trim()}`)
+    writeEnvFile(lines.join('\n'))
+    resetSettings()
+    res.json({ success: true, recipientAddress: recipientAddress.trim() })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 export { router as walletsRouter }

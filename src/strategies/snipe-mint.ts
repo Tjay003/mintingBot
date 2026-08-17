@@ -9,6 +9,7 @@ import {
   SEADROP_MINT_PUBLIC_ABI,
 } from '../core/tx-builder.js'
 import { analyzeContract } from '../utils/contract-analyzer.js'
+import { processAutoTransfer } from '../utils/nft-sweeper.js'
 import { watchForSaleActive } from '../core/block-monitor.js'
 import { getSettings } from '../config/settings.js'
 import { logger } from '../utils/logger.js'
@@ -26,6 +27,8 @@ export interface SnipeMintOptions {
   signal?: AbortSignal
   /** Which wallet indices to use (e.g. [1, 3]). Defaults to all wallets if omitted. */
   walletIndices?: number[]
+  /** Optional cold vault address to sweep minted NFTs to */
+  autoTransferVault?: Address
 }
 
 /**
@@ -157,11 +160,24 @@ export async function runSnipeMint(opts: SnipeMintOptions): Promise<void> {
 
         logger.divider()
         let successCount = 0
+        const vaultRecipient = opts.autoTransferVault || settings.recipientAddress || settings.autoTransferVault
+
         for (const r of results) {
           if (r.hash) {
             const timingStr = r.totalDurationMs ? ` (took ${(r.totalDurationMs / 1000).toFixed(2)}s)` : ''
             logger.success(`Wallet ${r.wallet.index} ✓  ${r.hash}${timingStr}`)
             successCount++
+
+            // Execute auto-transfer if recipient / cold vault address is specified
+            if (vaultRecipient && r.receipt) {
+              await processAutoTransfer(
+                r.wallet,
+                publicClient,
+                opts.contractAddress,
+                vaultRecipient,
+                r.receipt,
+              )
+            }
           } else {
             logger.error(`Wallet ${r.wallet.index} ✗  ${r.error}`)
           }

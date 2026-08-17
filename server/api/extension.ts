@@ -5,6 +5,7 @@ import { resolveTarget } from '../../src/utils/opensea-resolver.js'
 import { runPublicMint } from '../../src/strategies/public-mint.js'
 import { runWhitelistMint } from '../../src/strategies/whitelist-mint.js'
 import { getSession, setSession, resetSession } from '../session.js'
+import { getSettings } from '../../src/config/settings.js'
 import type { GasStrategy } from '../../src/core/gas-manager.js'
 import { logger } from '../../src/utils/logger.js'
 
@@ -33,6 +34,7 @@ async function fetchEthPriceUsdt(): Promise<number> {
  */
 router.get('/status', async (_req, res) => {
   try {
+    const settings = getSettings()
     const [wallets, ethPrice] = await Promise.all([
       loadBalances(false, true),
       fetchEthPriceUsdt(),
@@ -43,11 +45,13 @@ router.get('/status', async (_req, res) => {
     res.json({
       connected: true,
       version: '1.0.0',
+      recipientAddress: settings.recipientAddress || settings.autoTransferVault || '',
       activeSession: session.status === 'running'
         ? {
             status: session.status,
             target: session.target,
             mode: session.mode,
+            autoTransferVault: session.autoTransferVault,
           }
         : null,
       ethPriceUsdt: ethPrice,
@@ -87,6 +91,7 @@ router.post('/mint', async (req, res) => {
     gasStrategy = 'turbo',
     walletIndices,
     mode = 'public',
+    autoTransferVault,
   } = req.body as {
     target?: string
     quantity?: number
@@ -94,6 +99,7 @@ router.post('/mint', async (req, res) => {
     gasStrategy?: GasStrategy
     walletIndices?: number[]
     mode?: 'public' | 'whitelist'
+    autoTransferVault?: string
   }
 
   if (!target) {
@@ -103,6 +109,9 @@ router.post('/mint', async (req, res) => {
 
   try {
     const resolved = await resolveTarget(target)
+    const vault = autoTransferVault && autoTransferVault.startsWith('0x') && autoTransferVault.length === 42
+      ? (autoTransferVault as `0x${string}`)
+      : undefined
 
     setSession({
       status: 'running',
@@ -114,11 +123,13 @@ router.post('/mint', async (req, res) => {
       priceEth: String(priceEth),
       gasStrategy: (gasStrategy as GasStrategy) || 'turbo',
       selectedWallets: walletIndices,
+      autoTransferVault,
     })
 
     logger.banner()
     logger.info(`⚡ [Chrome Extension Bridge] Mint triggered`)
     logger.info(`Target: ${resolved.contractAddress} | Qty: ${quantity} | Gas: ${gasStrategy}`)
+    if (vault) logger.info(`Auto-Transfer Cold Vault: ${vault}`)
 
     res.json({
       success: true,
@@ -137,6 +148,7 @@ router.post('/mint', async (req, res) => {
             priceEth: String(priceEth),
             gasStrategy: (gasStrategy as GasStrategy) || 'turbo',
             walletIndices,
+            autoTransferVault: vault,
           })
         } else {
           await runPublicMint({
@@ -146,6 +158,7 @@ router.post('/mint', async (req, res) => {
             priceEth: String(priceEth),
             gasStrategy: (gasStrategy as GasStrategy) || 'turbo',
             walletIndices,
+            autoTransferVault: vault,
           })
         }
         setSession({ status: 'success', endedAt: new Date() })

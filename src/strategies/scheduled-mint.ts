@@ -1,4 +1,4 @@
-import { parseEther, type Address, type Abi } from 'viem'
+import { parseEther, type Address, type Abi, type TransactionReceipt } from 'viem'
 import { getPublicClient, loadBalances, filterSolventWallets, getNonce, type ManagedWallet } from '../wallets/manager.js'
 import {
   executeParallelMint,
@@ -12,6 +12,7 @@ import {
   SEADROP_MINT_PUBLIC_ABI,
 } from '../core/tx-builder.js'
 import { analyzeContract } from '../utils/contract-analyzer.js'
+import { processAutoTransfer } from '../utils/nft-sweeper.js'
 import { sleepUntil } from '../core/block-monitor.js'
 import { getSettings } from '../config/settings.js'
 import { logger } from '../utils/logger.js'
@@ -28,6 +29,8 @@ export interface ScheduledMintOptions {
   gasStrategy: GasStrategy
   customGasPriceGwei?: number
   walletIndices?: number[]
+  /** Optional cold vault address to sweep minted NFTs to */
+  autoTransferVault?: Address
   /** Optional signal to abort the scheduled mint */
   signal?: AbortSignal
 }
@@ -201,6 +204,7 @@ export async function runScheduledMint(opts: ScheduledMintOptions): Promise<void
     submitDurationMs?: number
     confirmDurationMs?: number
     totalDurationMs?: number
+    receipt?: TransactionReceipt
   }>
 
   if (preSignedTxs.length > 0) {
@@ -214,11 +218,24 @@ export async function runScheduledMint(opts: ScheduledMintOptions): Promise<void
 
   logger.divider()
   let successCount = 0
+  const vaultRecipient = opts.autoTransferVault || settings.recipientAddress || settings.autoTransferVault
+
   for (const r of results) {
     if (r.hash) {
       const timingStr = r.totalDurationMs ? ` (took ${(r.totalDurationMs / 1000).toFixed(2)}s)` : ''
       logger.success(`Wallet ${r.wallet.index} ✓  ${r.hash}${timingStr}`)
       successCount++
+
+      // Execute auto-transfer if recipient / cold vault address is specified
+      if (vaultRecipient && r.receipt) {
+        await processAutoTransfer(
+          r.wallet,
+          publicClient,
+          opts.contractAddress,
+          vaultRecipient,
+          r.receipt,
+        )
+      }
     } else {
       logger.error(`Wallet ${r.wallet.index} ✗  ${r.error}`)
     }

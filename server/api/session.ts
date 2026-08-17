@@ -52,6 +52,7 @@ router.post('/start', async (req, res) => {
     signature,
     mintTime,
     selectedWallets,
+    autoTransferVault,
   } = req.body as {
     mode: SessionMode
     target: string
@@ -65,6 +66,7 @@ router.post('/start', async (req, res) => {
     signature?: string
     mintTime?: string
     selectedWallets?: number[]
+    autoTransferVault?: string
   }
 
   if (!mode || !target) {
@@ -91,6 +93,7 @@ router.post('/start', async (req, res) => {
       gasStrategy,
       mintTime,
       selectedWallets,
+      autoTransferVault,
     })
 
     res.json({ success: true, message: `Session started (${mode})`, target: resolved.contractAddress })
@@ -98,6 +101,10 @@ router.post('/start', async (req, res) => {
     // Execute session in background asynchronously
     ;(async () => {
       try {
+        const vault = autoTransferVault && autoTransferVault.startsWith('0x') && autoTransferVault.length === 42
+          ? (autoTransferVault as `0x${string}`)
+          : undefined
+
         if (mode === 'public') {
           await runPublicMint({
             contractAddress: resolved.contractAddress,
@@ -107,6 +114,7 @@ router.post('/start', async (req, res) => {
             gasStrategy,
             customGasPriceGwei,
             walletIndices: selectedWallets,
+            autoTransferVault: vault,
           })
         } else if (mode === 'snipe') {
           await runSnipeMint({
@@ -118,6 +126,7 @@ router.post('/start', async (req, res) => {
             customGasPriceGwei,
             signal: abortController.signal,
             walletIndices: selectedWallets,
+            autoTransferVault: vault,
           })
         } else if (mode === 'whitelist') {
           let parsedProof: `0x${string}`[] | undefined
@@ -139,6 +148,7 @@ router.post('/start', async (req, res) => {
             gasStrategy,
             customGasPriceGwei,
             walletIndices: selectedWallets,
+            autoTransferVault: vault,
           })
         } else if (mode === 'scheduled') {
           if (!mintTime) throw new Error('Missing mintTime for scheduled mint')
@@ -152,6 +162,7 @@ router.post('/start', async (req, res) => {
             customGasPriceGwei,
             walletIndices: selectedWallets,
             signal: abortController.signal,
+            autoTransferVault: vault,
           })
         }
 

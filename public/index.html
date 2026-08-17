@@ -617,6 +617,20 @@
               </select>
             </div>
           </div>
+          <!-- Auto-Transfer Cold Vault (OSNM-Z) -->
+          <div class="form-group" style="padding: 12px; background: #F8FAFC; border: var(--border-width) solid var(--border); border-radius: 8px; margin-top: 6px; margin-bottom: 12px;">
+            <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; margin-bottom: 0;">
+              <span style="display: flex; align-items: center; gap: 8px; font-weight: 700;">
+                <input type="checkbox" id="session-auto-transfer" onchange="document.getElementById('session-vault-box').style.display = this.checked ? 'block' : 'none'">
+                <span>Auto-Transfer / Cold Vault Sweeper</span>
+              </span>
+              <span class="badge badge-green" style="font-size: 0.7rem;">OSNM-Z</span>
+            </label>
+            <div id="session-vault-box" style="display: none; margin-top: 10px;">
+              <input type="text" id="session-vault-address" class="form-control" placeholder="Cold Vault Address (0x...)" style="font-family: var(--font-mono); font-size: 0.85rem;">
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Minted NFTs will be immediately swept from burner wallets to this cold storage address.</div>
+            </div>
+          </div>
           <div class="form-group" style="margin-top: 4px;">
             <label style="display: flex; justify-content: space-between; align-items: center;">
               <span>Select Active Wallets for Session</span>
@@ -679,6 +693,56 @@
 
     <!-- 3. WALLETS VIEW -->
     <section id="view-wallets" class="content-view">
+      <div class="grid-2" style="margin-bottom: 20px;">
+        <!-- Multicall3 1-Tx Batch Funder (from OSNM-Z) -->
+        <div class="card" style="margin-bottom: 0; border-left: 4px solid var(--accent);">
+          <div class="card-title">
+            <span style="display: flex; align-items: center; gap: 8px;">
+              <i data-lucide="zap" style="color: var(--accent);"></i>
+              Multicall3 1-Tx Batch Funder
+            </span>
+            <span class="badge badge-green">1-TX ATOMIC</span>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+            Fund all your burner wallets atomically in 1 single transaction from Master Wallet 1 via canonical Multicall3 (<code>0xcA11...CA11</code>).
+          </p>
+          <form onsubmit="handleBatchFund(event)">
+            <div class="form-group">
+              <label>Amount per Burner Wallet (ETH)</label>
+              <input type="text" id="batch-fund-amount" class="form-control" placeholder="e.g. 0.005" value="0.005" required>
+            </div>
+            <button type="submit" id="btn-batch-fund" class="btn btn-primary" style="width: 100%;">
+              <i data-lucide="send"></i> Disperse ETH via Multicall3 (1 Tx)
+            </button>
+          </form>
+          <div id="batch-fund-result" style="margin-top: 10px; font-size: 0.85rem;"></div>
+        </div>
+
+        <!-- Sweep Native ETH Dust (from OSNM-Z) -->
+        <div class="card" style="margin-bottom: 0; border-left: 4px solid var(--amber);">
+          <div class="card-title">
+            <span style="display: flex; align-items: center; gap: 8px;">
+              <i data-lucide="arrow-down-to-dot" style="color: var(--amber);"></i>
+              Sweep Native ETH Dust
+            </span>
+            <span class="badge badge-amber">WITHDRAW DUST</span>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+            Collect all remaining unspent ETH dust from burner wallets back to your Cold Vault storage address.
+          </p>
+          <form onsubmit="handleSweepDust(event)">
+            <div class="form-group">
+              <label>Destination Cold Vault Address (0x...)</label>
+              <input type="text" id="sweep-vault-addr" class="form-control" placeholder="0x..." style="font-family: var(--font-mono);" required>
+            </div>
+            <button type="submit" id="btn-sweep-dust" class="btn btn-secondary" style="width: 100%;">
+              <i data-lucide="download"></i> Sweep All Balances to Vault
+            </button>
+          </form>
+          <div id="sweep-dust-result" style="margin-top: 10px; font-size: 0.85rem;"></div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-title">
           <span style="display: flex; align-items: center; gap: 8px;">
@@ -844,6 +908,21 @@
                 <option value="fast">Fast (1.5x)</option>
                 <option value="safe">Safe (1.0x)</option>
               </select>
+            </div>
+          </div>
+
+          <!-- Auto-Transfer Cold Vault (OSNM-Z) -->
+          <div class="form-group" style="padding: 12px; background: #F8FAFC; border: var(--border-width) solid var(--border); border-radius: 8px; margin-top: 6px; margin-bottom: 12px;">
+            <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; margin-bottom: 0;">
+              <span style="display: flex; align-items: center; gap: 8px; font-weight: 700;">
+                <input type="checkbox" id="sched-auto-transfer" onchange="document.getElementById('sched-vault-box').style.display = this.checked ? 'block' : 'none'">
+                <span>Auto-Transfer / Cold Vault Sweeper</span>
+              </span>
+              <span class="badge badge-green" style="font-size: 0.7rem;">OSNM-Z</span>
+            </label>
+            <div id="sched-vault-box" style="display: none; margin-top: 10px;">
+              <input type="text" id="sched-vault-address" class="form-control" placeholder="Cold Vault Address (0x...)" style="font-family: var(--font-mono); font-size: 0.85rem;">
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Minted NFTs will be immediately swept from burner wallets to this cold storage address.</div>
             </div>
           </div>
 
@@ -1117,6 +1196,9 @@
         return;
       }
 
+      const autoTransfer = document.getElementById('session-auto-transfer')?.checked;
+      const autoTransferVault = autoTransfer ? document.getElementById('session-vault-address')?.value?.trim() : undefined;
+
       const payload = {
         target: document.getElementById('target-input').value,
         mode: document.getElementById('mode-select').value,
@@ -1124,6 +1206,7 @@
         priceEth: document.getElementById('price-input').value,
         gasStrategy: document.getElementById('gas-select').value,
         selectedWallets,
+        autoTransferVault,
       };
 
       try {
@@ -1546,6 +1629,82 @@
       } catch (err) {}
     }
 
+    async function handleBatchFund(e) {
+      e.preventDefault();
+      const amountEth = document.getElementById('batch-fund-amount').value.trim();
+      const resultEl = document.getElementById('batch-fund-result');
+      const btn = document.getElementById('btn-batch-fund');
+      if (!amountEth || parseFloat(amountEth) <= 0) return alert('Enter valid ETH amount');
+
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader" class="spin"></i> Dispersing 1-Tx...`;
+      if (resultEl) resultEl.innerHTML = `<span style="color: var(--accent-dark);">Broadcasting Multicall3 transaction...</span>`;
+      lucide.createIcons();
+
+      try {
+        const res = await fetch(`${API}/wallets/fund-batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amountEthPerWallet: amountEth })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          if (resultEl) resultEl.innerHTML = `<span style="color: var(--red);">Failed: ${data.error}</span>`;
+          alert(data.error);
+        } else {
+          if (resultEl) resultEl.innerHTML = `<span style="color: var(--green); font-weight: 700;">✓ Multicall3 Funded ${data.walletsFunded} Wallets (${data.totalEthDistributed} ETH) in 1 Tx!</span>`;
+          alert(`✓ Multicall3 1-Tx Dispersal Successful! Funded ${data.walletsFunded} wallets (${data.totalEthDistributed} ETH).`);
+          fetchWallets();
+        }
+      } catch (err) {
+        if (resultEl) resultEl.innerHTML = `<span style="color: var(--red);">${err.message}</span>`;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="send"></i> Disperse ETH via Multicall3 (1 Tx)`;
+        lucide.createIcons();
+      }
+    }
+
+    async function handleSweepDust(e) {
+      e.preventDefault();
+      const recipientAddress = document.getElementById('sweep-vault-addr').value.trim();
+      const resultEl = document.getElementById('sweep-dust-result');
+      const btn = document.getElementById('btn-sweep-dust');
+      if (!recipientAddress || !recipientAddress.startsWith('0x') || recipientAddress.length !== 42) {
+        return alert('Enter valid 0x 40-character Cold Vault address');
+      }
+
+      if (!confirm(`Sweep all remaining ETH dust from burner wallets to ${recipientAddress}?`)) return;
+
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader" class="spin"></i> Sweeping...`;
+      lucide.createIcons();
+
+      try {
+        const res = await fetch(`${API}/wallets/sweep`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipientAddress })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          if (resultEl) resultEl.innerHTML = `<span style="color: var(--red);">Failed: ${data.error}</span>`;
+          alert(data.error);
+        } else {
+          const count = data.results?.filter(r => r.hash && !r.error)?.length || 0;
+          if (resultEl) resultEl.innerHTML = `<span style="color: var(--green); font-weight: 700;">✓ Swept from ${count} burner wallets to cold vault!</span>`;
+          alert(`✓ Swept ETH dust from ${count} wallets to ${recipientAddress}!`);
+          fetchWallets();
+        }
+      } catch (err) {
+        if (resultEl) resultEl.innerHTML = `<span style="color: var(--red);">${err.message}</span>`;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="download"></i> Sweep All Balances to Vault`;
+        lucide.createIcons();
+      }
+    }
+
     async function handleSchedule(e) {
       e.preventDefault();
       const target = document.getElementById('sched-target').value.trim();
@@ -1554,6 +1713,8 @@
       const priceEth = document.getElementById('sched-price').value.trim() || '0';
       const gasStrategy = document.getElementById('sched-gas').value;
       const selectedWallets = Array.from(document.querySelectorAll('.schedule-wallet-cb:checked')).map(cb => parseInt(cb.value, 10));
+      const autoTransfer = document.getElementById('sched-auto-transfer')?.checked;
+      const autoTransferVault = autoTransfer ? document.getElementById('sched-vault-address')?.value?.trim() : undefined;
 
       if (!target) {
         alert('Please enter a target contract address or OpenSea URL.');
@@ -1586,7 +1747,8 @@
             quantity,
             priceEth,
             gasStrategy,
-            selectedWallets
+            selectedWallets,
+            autoTransferVault,
           })
         });
         const data = await res.json();

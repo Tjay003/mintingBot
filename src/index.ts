@@ -100,7 +100,8 @@ program
     'fast',
   )
   .option('--gas-price <gwei>', 'Custom gas price in Gwei (only for --gas-strategy custom)')
-  .action(async (target: string, opts: { quantity: string; price: string; function: string; gasStrategy: string; gasPrice?: string }) => {
+  .option('-v, --vault <address>', 'Auto-transfer / sweep minted NFTs to cold vault address')
+  .action(async (target: string, opts: { quantity: string; price: string; function: string; gasStrategy: string; gasPrice?: string; vault?: string }) => {
     const spinner = ora('Resolving target...').start()
     try {
       const { contractAddress, collectionName } = await resolveTarget(target)
@@ -113,6 +114,7 @@ program
         priceEth: opts.price,
         gasStrategy: opts.gasStrategy as GasStrategy,
         customGasPriceGwei: opts.gasPrice ? parseFloat(opts.gasPrice) : undefined,
+        autoTransferVault: opts.vault as `0x${string}` | undefined,
       })
     } catch (err) {
       spinner.fail()
@@ -135,7 +137,8 @@ program
     'turbo',
   )
   .option('--gas-price <gwei>', 'Custom gas price in Gwei (only for --gas-strategy custom)')
-  .action(async (target: string, opts: { quantity: string; price: string; function: string; gasStrategy: string; gasPrice?: string }) => {
+  .option('-v, --vault <address>', 'Auto-transfer / sweep minted NFTs to cold vault address')
+  .action(async (target: string, opts: { quantity: string; price: string; function: string; gasStrategy: string; gasPrice?: string; vault?: string }) => {
     const spinner = ora('Resolving target...').start()
     try {
       const { contractAddress, collectionName } = await resolveTarget(target)
@@ -148,6 +151,7 @@ program
         priceEth: opts.price,
         gasStrategy: opts.gasStrategy as GasStrategy,
         customGasPriceGwei: opts.gasPrice ? parseFloat(opts.gasPrice) : undefined,
+        autoTransferVault: opts.vault as `0x${string}` | undefined,
       })
     } catch (err) {
       spinner.fail()
@@ -182,6 +186,7 @@ program
     'fast',
   )
   .option('--gas-price <gwei>', 'Custom gas price in Gwei (only for --gas-strategy custom)')
+  .option('-v, --vault <address>', 'Auto-transfer / sweep minted NFTs to cold vault address')
   .action(
     async (
       target: string,
@@ -194,6 +199,7 @@ program
         function?: string
         gasStrategy: string
         gasPrice?: string
+        vault?: string
       },
     ) => {
       const spinner = ora('Resolving target...').start()
@@ -235,6 +241,7 @@ program
           priceEth: opts.price,
           gasStrategy: opts.gasStrategy as GasStrategy,
           customGasPriceGwei: opts.gasPrice ? parseFloat(opts.gasPrice) : undefined,
+          autoTransferVault: opts.vault as `0x${string}` | undefined,
         })
       } catch (err) {
         spinner.fail()
@@ -259,6 +266,7 @@ program
     'turbo',
   )
   .option('--gas-price <gwei>', 'Custom gas price in Gwei (only for --gas-strategy custom)')
+  .option('-v, --vault <address>', 'Auto-transfer / sweep minted NFTs to cold vault address')
   .action(
     async (
       target: string,
@@ -269,6 +277,7 @@ program
         function: string
         gasStrategy: string
         gasPrice?: string
+        vault?: string
       },
     ) => {
       const spinner = ora('Resolving target...').start()
@@ -284,6 +293,7 @@ program
           mintTime: opts.time,
           gasStrategy: opts.gasStrategy as GasStrategy,
           customGasPriceGwei: opts.gasPrice ? parseFloat(opts.gasPrice) : undefined,
+          autoTransferVault: opts.vault as `0x${string}` | undefined,
         })
       } catch (err) {
         spinner.fail()
@@ -292,6 +302,56 @@ program
       }
     },
   )
+
+// ─── fund (Multicall3) ─────────────────────────────────────────────────────────
+
+program
+  .command('fund <amountEth>')
+  .description('Fund all burner wallets in 1 transaction using Multicall3 (e.g. mintbot fund 0.005)')
+  .option('-p, --private-key <key>', 'Funder master private key (defaults to WALLET_KEY_1 or SPONSOR_KEY)')
+  .action(async (amountEth: string, opts: { privateKey?: string }) => {
+    try {
+      const { batchFundWallets } = await import('./wallets/funder.js')
+      const { getSettings } = await import('./config/settings.js')
+      const settings = getSettings()
+
+      const funderKey = opts.privateKey || settings.sponsorKey || settings.walletKeys[0]
+      if (!funderKey) {
+        throw new Error('No funder private key available in .env or --private-key argument')
+      }
+
+      await batchFundWallets({
+        funderPrivateKey: funderKey as `0x${string}`,
+        amountEthPerWallet: amountEth,
+      })
+    } catch (err) {
+      logger.error(String(err))
+      process.exit(1)
+    }
+  })
+
+// ─── sweep (Dust & Vault) ──────────────────────────────────────────────────────
+
+program
+  .command('sweep [recipient]')
+  .description('Sweep all remaining native ETH dust from burner wallets back to cold vault')
+  .action(async (recipient?: string) => {
+    try {
+      const { sweepNativeEthBalances } = await import('./wallets/funder.js')
+      const { getSettings } = await import('./config/settings.js')
+      const settings = getSettings()
+
+      const target = recipient || settings.recipientAddress || settings.autoTransferVault
+      if (!target || !target.startsWith('0x') || target.length !== 42) {
+        throw new Error('Please specify a valid 0x recipient address, or set RECIPIENT_ADDRESS in .env')
+      }
+
+      await sweepNativeEthBalances(target as `0x${string}`)
+    } catch (err) {
+      logger.error(String(err))
+      process.exit(1)
+    }
+  })
 
 // ─── Parse & run ──────────────────────────────────────────────────────────────
 
