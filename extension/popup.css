@@ -1,0 +1,198 @@
+/* MintBot Extension Popup Styles */
+:root {
+  --bg: #0B0F17;
+  --card-bg: #111827;
+  --card-hover: #182234;
+  --border: #1F2937;
+  --accent: #10B981;
+  --accent-hover: #34D399;
+  --text-main: #F8FAFC;
+  --text-muted: #94A3B8;
+  --red: #EF4444;
+  --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 360px;
+  background: var(--bg);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  padding: 14px;
+  user-select: none;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+
+.popup-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+}
+
+.popup-brand img {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+}
+
+.status-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-online {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.status-offline {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--red);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.input, .select {
+  width: 100%;
+  background: #182234;
+  border: 1px solid #2B3A55;
+  color: var(--text-main);
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+}
+
+.input:focus, .select:focus {
+  border-color: var(--accent);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 8px;
+}
+
+.wallets-box {
+  max-height: 120px;
+  overflow-y: auto;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wallet-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #182234;
+  padding: 6px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+.wallet-name {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.wallet-bal {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.btn-blast {
+  width: 100%;
+  padding: 11px;
+  background: var(--accent);
+  color: #0B0F17;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
+  margin-top: 4px;
+}
+
+.btn-blast:hover {
+  background: var(--accent-hover);
+}
+
+.btn-blast:disabled {
+  background: #374151;
+  color: #9CA3AF;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn-dash {
+  width: 100%;
+  padding: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+  text-align: center;
+  text-decoration: none;
+  display: block;
+}
+
+.btn-dash:hover {
+  color: var(--text-main);
+  border-color: var(--text-muted);
+}

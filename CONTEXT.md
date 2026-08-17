@@ -81,6 +81,17 @@ MintBot supports 4 distinct minting archetypes with automatic detection:
 
 ---
 
+## 5. Chrome Extension Companion (`extension/`)
+- **Manifest V3 Extension**: Packaged in [`extension/`](file:///C:/Users/Tyrone%20James%20Bacolod/orca/projects/mintingBot/extension).
+- **Injected Drop HUD (`content.js` / `content.css`)**: Injects an interactive overlay on `opensea.io/collection/*/drop` showing active stages, live countdowns, wallet status, and 1-click **"⚡ BLAST ALL WALLETS"** button.
+- **Popup Control Panel (`popup.html` / `popup.js`)**: Quick toolbar menu with live wallet balances, gas toggles (Turbo / Fast / Safe), and tab detection.
+- **Local Bridge Router (`server/api/extension.ts`)**:
+  - `GET /api/extension/status`: Fetches core status and wallet balances.
+  - `POST /api/extension/mint`: Triggers multi-wallet parallel mint session.
+- **Hotkey**: `Ctrl + Shift + M` / `Cmd + Shift + M` triggers an instant snipe on the active OpenSea drop tab.
+
+---
+
 ## 5. Directory Structure & Key Files
 
 ```

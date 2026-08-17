@@ -8,6 +8,7 @@ import { walletsRouter } from './api/wallets.js'
 import { analyzeRouter } from './api/analyze.js'
 import { gasRouter } from './api/gas.js'
 import { sessionRouter } from './api/session.js'
+import { extensionRouter } from './api/extension.js'
 import { logger } from '../src/utils/logger.js'
 
 const app = express()
@@ -27,6 +28,7 @@ app.use('/api/wallets', walletsRouter)
 app.use('/api/analyze', analyzeRouter)
 app.use('/api/gas', gasRouter)
 app.use('/api/session', sessionRouter)
+app.use('/api/extension', extensionRouter)
 
 // Attach WebSocket server for live updates
 attachWebSocket(server)

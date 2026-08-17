@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MintBot Sniper</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- Header -->
+  <div class="popup-header">
+    <div class="popup-brand">
+      <img src="icons/icon48.png" alt="MintBot">
+      <span>MINTBOT</span>
+    </div>
+    <div id="status-pill" class="status-pill status-offline">
+      <span>CORE: OFF</span>
+    </div>
+  </div>
+
+  <!-- Detected Active Tab Target -->
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span class="label">Target Target / URL</span>
+      <span id="tab-detect-badge" style="font-size: 10px; color: var(--accent); font-weight: 700; cursor: pointer;">DETECT TAB</span>
+    </div>
+    <input type="text" id="target-input" class="input" placeholder="https://opensea.io/collection/..." />
+  </div>
+
+  <!-- Mint Controls -->
+  <div class="grid-2" style="margin-bottom: 10px;">
+    <div>
+      <span class="label">Qty / Wallet</span>
+      <input type="number" id="qty-input" class="input" value="1" min="1" />
+    </div>
+    <div>
+      <span class="label">Gas Strategy</span>
+      <select id="gas-select" class="select">
+        <option value="turbo" selected>Turbo (2.5x)</option>
+        <option value="fast">Fast (1.5x)</option>
+        <option value="safe">Safe (1.0x)</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Wallets Overview -->
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span class="label">Active Wallets (<span id="wallets-count-text">0</span>)</span>
+      <span id="eth-price-text" style="font-size: 10px; color: var(--text-muted); font-weight: 700;">ETH: $0</span>
+    </div>
+    <div id="wallets-list" class="wallets-box">
+      <div style="color: var(--text-muted); font-size: 11px; text-align: center; padding: 10px;">
+        Core is offline. Run <code>npm run ui</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- Blast Button -->
+  <button id="blast-btn" class="btn-blast">
+    <span>⚡ BLAST ALL WALLETS</span>
+  </button>
+
+  <div id="feedback-box" style="display: none; margin-top: 8px; font-size: 11px; padding: 6px; border-radius: 6px; text-align: center;"></div>
+
+  <!-- Dashboard Link -->
+  <a href="http://localhost:3000" target="_blank" class="btn-dash">
+    Open Full Dashboard (localhost:3000) ↗
+  </a>
+
+  <script src="popup.js"></script>
+</body>
+</html>
