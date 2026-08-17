@@ -18,11 +18,27 @@
     </div>
   </div>
 
+  <!-- Global Error Notification Banner -->
+  <div id="global-error-banner" class="global-error-banner" style="display: none;">
+    <div class="error-banner-content">
+      <span class="error-banner-icon">⚠️</span>
+      <div class="error-banner-text" id="global-error-msg">An error occurred</div>
+    </div>
+    <div class="error-banner-actions">
+      <button id="view-error-console-btn" class="btn btn-sm btn-outline" style="font-size: 9px; padding: 2px 6px;">Inspect</button>
+      <button id="dismiss-error-btn" class="btn btn-sm btn-outline" style="font-size: 9px; padding: 2px 6px;">✕</button>
+    </div>
+  </div>
+
   <!-- Navigation Tabs -->
   <div class="nav-tabs">
     <button class="nav-tab active" data-tab="tab-snipe">⚡ Snipe</button>
     <button class="nav-tab" data-tab="tab-schedule">⏱️ Schedule</button>
     <button class="nav-tab" data-tab="tab-wallets">👛 Wallets</button>
+    <button class="nav-tab" data-tab="tab-console">
+      <span>🖥️ Console</span>
+      <span id="console-error-badge" class="badge badge-red" style="display: none; font-size: 8px; padding: 1px 4px; border-radius: 8px;">0</span>
+    </button>
     <button class="nav-tab" data-tab="tab-analyze">🔍 Analyzer</button>
     <button class="nav-tab" data-tab="tab-gas">⛽ Gas</button>
   </div>
@@ -111,7 +127,10 @@
 
       <!-- Live Session Status / Logs -->
       <div id="snipe-session-card" class="card" style="display: none;">
-        <div class="label" style="margin-bottom: 6px;">Live Mint Session Status</div>
+        <div class="label" style="margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+          <span>Live Mint Session Status</span>
+          <span id="snipe-open-console-link" style="color: var(--accent-dark); font-size: 10px; cursor: pointer; text-transform: none;">Open Full Console ↗</span>
+        </div>
         <div id="snipe-session-info" style="font-size: 11px; margin-bottom: 6px; color: var(--text-sub);"></div>
         <div id="snipe-log-box" class="log-box"></div>
       </div>
@@ -256,7 +275,49 @@
       </div>
     </div>
 
-    <!-- TAB 4: ANALYZER -->
+    <!-- TAB 4: CONSOLE & DEBUG TERMINAL -->
+    <div id="tab-console" class="tab-pane">
+      <!-- Filter Bar -->
+      <div class="card" style="padding: 6px 10px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+        <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+          <button class="log-filter-btn active" data-filter="all">All (<span id="log-count-all">0</span>)</button>
+          <button class="log-filter-btn" data-filter="error">🔴 Errors (<span id="log-count-error">0</span>)</button>
+          <button class="log-filter-btn" data-filter="fire">⚡ Fire (<span id="log-count-fire">0</span>)</button>
+          <button class="log-filter-btn" data-filter="success">🟢 Success</button>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <button id="copy-logs-btn" class="btn btn-outline btn-sm" title="Copy all logs" style="padding: 2px 6px; font-size: 10px;">📋 Copy</button>
+          <button id="clear-logs-btn" class="btn btn-outline btn-sm" title="Clear console" style="padding: 2px 6px; font-size: 10px;">🗑️ Clear</button>
+        </div>
+      </div>
+
+      <!-- Monospace Debug Terminal -->
+      <div class="terminal-card">
+        <div class="terminal-header">
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <span class="terminal-dot dot-red"></span>
+            <span class="terminal-dot dot-yellow"></span>
+            <span class="terminal-dot dot-green"></span>
+            <span style="font-size: 10px; font-weight: 700; color: #94A3B8; margin-left: 4px;">DEBUG TELEMETRY & LOGS</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label style="font-size: 10px; color: #94A3B8; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+              <input type="checkbox" id="console-autoscroll" checked /> Auto-scroll
+            </label>
+            <span id="ws-pill" class="badge badge-green" style="font-size: 8px;">WS: LIVE</span>
+          </div>
+        </div>
+        <div id="full-terminal-output" class="terminal-body">
+          <div class="terminal-row row-info">
+            <span class="t-time">[Init]</span>
+            <span class="t-tag tag-info">INFO</span>
+            <span class="t-msg">MintBot Debug Console initialized. Ready to capture live events & errors.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: ANALYZER -->
     <div id="tab-analyze" class="tab-pane">
       <div class="card">
         <div class="form-group">
@@ -278,7 +339,7 @@
       </div>
     </div>
 
-    <!-- TAB 5: GAS & SAFETY -->
+    <!-- TAB 6: GAS & SAFETY -->
     <div id="tab-gas" class="tab-pane">
       <div class="card">
         <div class="label" style="margin-bottom: 8px;">Robinhood Chain Gas Tracker</div>

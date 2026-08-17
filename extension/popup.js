@@ -1,5 +1,5 @@
 /**
- * MintBot Chrome Extension — Complete Client Logic
+ * MintBot Chrome Extension — Complete Client Logic & Debug Console
  */
 
 const API = 'http://localhost:3000/api'
@@ -9,41 +9,343 @@ let defaultRecipientAddress = ''
 let pollSessionTimer = null
 let analyzeDebounceTimer = null
 
+// Console & Telemetry state
+const consoleLogs = []
+let activeLogFilter = 'all'
+let wsConnection = null
+let unreadErrorCount = 0
+
 document.addEventListener('DOMContentLoaded', () => {
+  initGlobalErrorHandling()
   initTabs()
   initDetectButtons()
+  initConsoleTab()
   initWalletsManager()
   initSnipeTab()
   initScheduleTab()
   initAnalyzerTab()
   initGasTracker()
 
+  initWebSocket()
+  fetchRecentLogs()
+
   refreshCore()
   setInterval(refreshCore, 3000)
 })
 
 // ==========================================
-// 1. TABS SYSTEM
+// 1. GLOBAL ERROR HANDLING & BANNER
+// ==========================================
+function initGlobalErrorHandling() {
+  window.addEventListener('error', (event) => {
+    appendConsoleLog('error', `UI Exception: ${event.message} at ${event.filename}:${event.lineno}`)
+    showGlobalError(event.message)
+  })
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason ? (event.reason.message || String(event.reason)) : 'Unhandled Promise Rejection'
+    appendConsoleLog('error', `Promise Rejection: ${reason}`)
+    showGlobalError(reason)
+  })
+
+  const dismissBtn = document.getElementById('dismiss-error-btn')
+  const inspectBtn = document.getElementById('view-error-console-btn')
+
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', () => {
+      const banner = document.getElementById('global-error-banner')
+      if (banner) banner.style.display = 'none'
+    })
+  }
+
+  if (inspectBtn) {
+    inspectBtn.addEventListener('click', () => {
+      const banner = document.getElementById('global-error-banner')
+      if (banner) banner.style.display = 'none'
+      switchToTab('tab-console')
+      setLogFilter('error')
+    })
+  }
+
+  const openConsoleLink = document.getElementById('snipe-open-console-link')
+  if (openConsoleLink) {
+    openConsoleLink.addEventListener('click', () => {
+      switchToTab('tab-console')
+    })
+  }
+}
+
+function showGlobalError(message) {
+  const banner = document.getElementById('global-error-banner')
+  const textEl = document.getElementById('global-error-msg')
+  if (banner && textEl) {
+    textEl.innerText = message
+    banner.style.display = 'flex'
+  }
+}
+
+// ==========================================
+// 2. TABS SYSTEM
 // ==========================================
 function initTabs() {
   const tabs = document.querySelectorAll('.nav-tab')
-  const panes = document.querySelectorAll('.tab-pane')
 
   tabs.forEach((tab) => {
     tab.addEventListener('click', () => {
-      tabs.forEach((t) => t.classList.remove('active'))
-      panes.forEach((p) => p.classList.remove('active'))
-
-      tab.classList.add('active')
       const targetId = tab.getAttribute('data-tab')
-      const targetPane = document.getElementById(targetId)
-      if (targetPane) targetPane.classList.add('active')
+      switchToTab(targetId)
     })
   })
 }
 
+function switchToTab(targetId) {
+  const tabs = document.querySelectorAll('.nav-tab')
+  const panes = document.querySelectorAll('.tab-pane')
+
+  tabs.forEach((t) => {
+    if (t.getAttribute('data-tab') === targetId) t.classList.add('active')
+    else t.classList.remove('active')
+  })
+
+  panes.forEach((p) => {
+    if (p.id === targetId) p.classList.add('active')
+    else p.classList.remove('active')
+  })
+
+  // Clear unread error badge if user views Console tab
+  if (targetId === 'tab-console') {
+    unreadErrorCount = 0
+    updateErrorBadge()
+  }
+}
+
 // ==========================================
-// 2. DETECT TAB BUTTONS
+// 3. CONSOLE & DEBUG TERMINAL
+// ==========================================
+function initConsoleTab() {
+  // Filter buttons
+  const filterBtns = document.querySelectorAll('.log-filter-btn')
+  filterBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      filterBtns.forEach((b) => b.classList.remove('active'))
+      btn.classList.add('active')
+      const filter = btn.getAttribute('data-filter')
+      setLogFilter(filter)
+    })
+  })
+
+  // Copy Logs button
+  const copyBtn = document.getElementById('copy-logs-btn')
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      const text = consoleLogs
+        .map((l) => `[${l.timestamp}] [${l.level.toUpperCase()}] ${l.message}`)
+        .join('\n')
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = copyBtn.innerText
+        copyBtn.innerText = '✓ Copied'
+        setTimeout(() => (copyBtn.innerText = orig), 1500)
+      })
+    })
+  }
+
+  // Clear Logs button
+  const clearBtn = document.getElementById('clear-logs-btn')
+  if (clearBtn) {
+    clearBtn.addEventListener('click', async () => {
+      consoleLogs.length = 0
+      unreadErrorCount = 0
+      updateErrorBadge()
+      renderTerminalLogs()
+      try {
+        await fetch(`${API}/logs`, { method: 'DELETE' })
+      } catch {}
+    })
+  }
+}
+
+function setLogFilter(filter) {
+  activeLogFilter = filter
+  document.querySelectorAll('.log-filter-btn').forEach((b) => {
+    if (b.getAttribute('data-filter') === filter) b.classList.add('active')
+    else b.classList.remove('active')
+  })
+  renderTerminalLogs()
+}
+
+function initWebSocket() {
+  const wsPill = document.getElementById('ws-pill')
+  try {
+    wsConnection = new WebSocket('ws://localhost:3000')
+
+    wsConnection.onopen = () => {
+      if (wsPill) {
+        wsPill.className = 'badge badge-green'
+        wsPill.innerText = 'WS: LIVE'
+      }
+      appendConsoleLog('info', 'WebSocket stream connected to MintBot Core.')
+    }
+
+    wsConnection.onclose = () => {
+      if (wsPill) {
+        wsPill.className = 'badge badge-red'
+        wsPill.innerText = 'WS: DISCONNECTED'
+      }
+      // Retry in 3 seconds
+      setTimeout(initWebSocket, 3000)
+    }
+
+    wsConnection.onerror = () => {
+      if (wsPill) {
+        wsPill.className = 'badge badge-red'
+        wsPill.innerText = 'WS: ERROR'
+      }
+    }
+
+    wsConnection.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (data.type === 'log') {
+          appendConsoleLog(data.level, data.message, data.timestamp)
+        } else if (data.type === 'session') {
+          checkActiveSession(data)
+        }
+      } catch {}
+    }
+  } catch (err) {
+    if (wsPill) {
+      wsPill.className = 'badge badge-red'
+      wsPill.innerText = 'WS: OFF'
+    }
+  }
+}
+
+async function fetchRecentLogs() {
+  try {
+    const res = await fetch(`${API}/logs`)
+    if (res.ok) {
+      const data = await res.json()
+      if (Array.isArray(data.logs)) {
+        for (const item of data.logs) {
+          appendConsoleLog(item.level, item.message, item.timestamp, false)
+        }
+        renderTerminalLogs()
+      }
+    }
+  } catch {}
+}
+
+function appendConsoleLog(level, message, timestamp = new Date().toISOString(), renderNow = true) {
+  const cleanLevel = level || 'info'
+  const time = timestamp ? timestamp.slice(11, 19) : new Date().toTimeString().slice(0, 8)
+
+  if (cleanLevel === 'error') {
+    unreadErrorCount++
+    updateErrorBadge()
+    showGlobalError(message)
+  }
+
+  consoleLogs.push({ level: cleanLevel, message, timestamp: time })
+  if (consoleLogs.length > 300) consoleLogs.shift()
+
+  updateLogCounters()
+
+  if (renderNow) {
+    renderTerminalLogs()
+  }
+
+  // Also sync to mini snipe log box if active
+  const snipeBox = document.getElementById('snipe-log-box')
+  if (snipeBox) {
+    const row = document.createElement('div')
+    row.style.marginBottom = '2px'
+    row.innerHTML = `<span style="color: #64748B;">[${time}]</span> <span style="color: ${getLevelColor(cleanLevel)};">[${cleanLevel.toUpperCase()}]</span> ${escapeHtml(message)}`
+    snipeBox.appendChild(row)
+    snipeBox.scrollTop = snipeBox.scrollHeight
+  }
+}
+
+function updateLogCounters() {
+  const allCount = consoleLogs.length
+  const errCount = consoleLogs.filter((l) => l.level === 'error').length
+  const fireCount = consoleLogs.filter((l) => l.level === 'fire').length
+
+  const allEl = document.getElementById('log-count-all')
+  const errEl = document.getElementById('log-count-error')
+  const fireEl = document.getElementById('log-count-fire')
+
+  if (allEl) allEl.innerText = allCount
+  if (errEl) errEl.innerText = errCount
+  if (fireEl) fireEl.innerText = fireCount
+}
+
+function updateErrorBadge() {
+  const badge = document.getElementById('console-error-badge')
+  if (badge) {
+    if (unreadErrorCount > 0) {
+      badge.style.display = 'inline-block'
+      badge.innerText = unreadErrorCount
+    } else {
+      badge.style.display = 'none'
+    }
+  }
+}
+
+function renderTerminalLogs() {
+  const terminal = document.getElementById('full-terminal-output')
+  if (!terminal) return
+
+  const filtered = consoleLogs.filter((l) => {
+    if (activeLogFilter === 'all') return true
+    return l.level === activeLogFilter
+  })
+
+  if (filtered.length === 0) {
+    terminal.innerHTML = `<div style="color: #64748B; padding: 12px; text-align: center;">No logs matching filter "${activeLogFilter}"</div>`
+    return
+  }
+
+  terminal.innerHTML = filtered
+    .map((l) => {
+      const tagClass = `tag-${l.level}`
+      const rowClass = l.level === 'error' ? 'row-error' : l.level === 'fire' ? 'row-fire' : ''
+      return `
+      <div class="terminal-row ${rowClass}">
+        <span class="t-time">[${l.timestamp}]</span>
+        <span class="t-tag ${tagClass}">${l.level}</span>
+        <span class="t-msg">${escapeHtml(l.message)}</span>
+      </div>
+    `
+    })
+    .join('')
+
+  const autoscroll = document.getElementById('console-autoscroll')
+  if (autoscroll && autoscroll.checked) {
+    terminal.scrollTop = terminal.scrollHeight
+  }
+}
+
+function getLevelColor(level) {
+  switch (level) {
+    case 'error': return '#EF4444'
+    case 'success': return '#10B981'
+    case 'warn': return '#F59E0B'
+    case 'fire': return '#E879F9'
+    case 'block': return '#94A3B8'
+    default: return '#38BDF8'
+  }
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+// ==========================================
+// 4. DETECT TAB BUTTONS
 // ==========================================
 function initDetectButtons() {
   async function getCurrentTabUrl() {
@@ -68,6 +370,7 @@ function initDetectButtons() {
         const url = await getCurrentTabUrl()
         if (url) {
           input.value = url
+          appendConsoleLog('info', `Detected tab target URL: ${url}`)
           if (triggerSchedule) autoDetectScheduleStages(url)
         }
       })
@@ -76,12 +379,12 @@ function initDetectButtons() {
 }
 
 // ==========================================
-// 3. CORE STATUS & WALLETS LOADER
+// 5. CORE STATUS & WALLETS LOADER
 // ==========================================
 async function refreshCore() {
   try {
     const res = await fetch(`${API}/extension/status`)
-    if (!res.ok) throw new Error('Offline')
+    if (!res.ok) throw new Error('Core is offline')
     const data = await res.json()
 
     updateCoreStatus(true, data.walletsCount)
@@ -89,7 +392,6 @@ async function refreshCore() {
     currentEthPriceUsdt = data.ethPriceUsdt || currentEthPriceUsdt
     defaultRecipientAddress = data.recipientAddress || defaultRecipientAddress
 
-    // Populate vault fields if empty
     const snipeVault = document.getElementById('snipe-vault-address')
     const schedVault = document.getElementById('sched-vault-address')
     const sweepVault = document.getElementById('sweep-vault-input')
@@ -130,7 +432,7 @@ function updateCoreStatus(isOnline, walletCount) {
 }
 
 // ==========================================
-// 4. SNIPE / ACTIVE SESSION TAB
+// 6. SNIPE / ACTIVE SESSION TAB
 // ==========================================
 function initSnipeTab() {
   const startBtn = document.getElementById('snipe-start-btn')
@@ -172,6 +474,7 @@ function initSnipeTab() {
             const priceBadge = document.getElementById('snipe-price-badge')
             if (priceInput) priceInput.value = data.analysis.mintPriceEth
             if (priceBadge) priceBadge.innerText = `✓ ${data.analysis.mintPriceEth} ETH`
+            appendConsoleLog('info', `Target resolved price: ${data.analysis.mintPriceEth} ETH`)
           }
         } catch {}
       }, 600)
@@ -195,12 +498,13 @@ function initSnipeTab() {
       ).map((cb) => parseInt(cb.getAttribute('data-idx'), 10))
 
       if (!target) {
-        alert('Please provide an OpenSea URL or 0x contract address.')
+        showGlobalError('Target contract address or OpenSea URL is required.')
         return
       }
 
       startBtn.disabled = true
       startBtn.innerHTML = '<span>⚡ FIRING...</span>'
+      appendConsoleLog('fire', `Firing Blast Mint Session for target: ${target} [Mode: ${mode.toUpperCase()}]`)
 
       try {
         const res = await fetch(`${API}/session/start`, {
@@ -217,10 +521,16 @@ function initSnipeTab() {
           }),
         })
         const json = await res.json()
-        if (!res.ok) alert(json.error)
-        else pollSession()
+        if (!res.ok) {
+          appendConsoleLog('error', `Session start error: ${json.error}`)
+          showGlobalError(json.error)
+        } else {
+          appendConsoleLog('success', `Session armed and executing!`)
+          pollSession()
+        }
       } catch (err) {
-        alert(err.message)
+        appendConsoleLog('error', `Network failure: ${err.message}`)
+        showGlobalError(err.message)
       } finally {
         startBtn.disabled = false
         startBtn.innerHTML = '<span>⚡ BLAST MINT SESSION</span>'
@@ -232,6 +542,7 @@ function initSnipeTab() {
     stopBtn.addEventListener('click', async () => {
       try {
         await fetch(`${API}/session/stop`, { method: 'POST' })
+        appendConsoleLog('warn', `Session manually stopped by user.`)
         pollSession()
       } catch {}
     })
@@ -305,12 +616,13 @@ async function pollSession() {
       if (info) info.innerHTML = `Status: <span class="badge badge-green">COMPLETED ✓</span>`
     } else if (data.status === 'error') {
       if (info) info.innerHTML = `Status: <span class="badge badge-red">FAILED: ${data.error}</span>`
+      showGlobalError(data.error)
     }
   } catch {}
 }
 
 // ==========================================
-// 5. SCHEDULE TAB
+// 7. SCHEDULE TAB
 // ==========================================
 function initScheduleTab() {
   const targetInput = document.getElementById('sched-target')
@@ -362,7 +674,7 @@ function initScheduleTab() {
       ).map((cb) => parseInt(cb.getAttribute('data-idx'), 10))
 
       if (!target || !mintTime) {
-        alert('Target and Scheduled Mint Date/Time are required.')
+        showGlobalError('Target and Scheduled Mint Date/Time are required.')
         return
       }
 
@@ -385,13 +697,16 @@ function initScheduleTab() {
           }),
         })
         const json = await res.json()
-        if (!res.ok) alert(json.error)
-        else {
-          alert('✓ Scheduled Mint Armed! The bot will execute T-0 pre-signed blast at drop time.')
-          document.querySelector('[data-tab="tab-snipe"]')?.click()
+        if (!res.ok) {
+          appendConsoleLog('error', `Schedule Error: ${json.error}`)
+          showGlobalError(json.error)
+        } else {
+          appendConsoleLog('success', `Scheduled mint successfully armed for ${mintTime}!`)
+          switchToTab('tab-snipe')
         }
       } catch (err) {
-        alert(err.message)
+        appendConsoleLog('error', `Schedule Network Error: ${err.message}`)
+        showGlobalError(err.message)
       } finally {
         submitBtn.disabled = false
         submitBtn.innerHTML = '<span>⏱️ ARM SCHEDULED MINT (T-0 BLAST)</span>'
@@ -524,7 +839,7 @@ function updateScheduleSummary() {
 }
 
 // ==========================================
-// 6. WALLETS TAB (Multicall3 & Sweep)
+// 8. WALLETS TAB (Multicall3 & Sweep)
 // ==========================================
 function initWalletsManager() {
   const addBtn = document.getElementById('add-wallet-btn')
@@ -537,7 +852,7 @@ function initWalletsManager() {
       const privateKey = document.getElementById('add-wallet-pk')?.value.trim()
 
       if (!privateKey) {
-        alert('Private Key is required.')
+        showGlobalError('Private Key is required.')
         return
       }
 
@@ -549,14 +864,18 @@ function initWalletsManager() {
           body: JSON.stringify({ privateKey, label: label || undefined }),
         })
         const json = await res.json()
-        if (!res.ok) alert(json.error)
-        else {
+        if (!res.ok) {
+          appendConsoleLog('error', `Failed to add wallet: ${json.error}`)
+          showGlobalError(json.error)
+        } else {
+          appendConsoleLog('success', `Added new wallet (${label || 'Wallet'}) to vault.`)
           document.getElementById('add-wallet-label').value = ''
           document.getElementById('add-wallet-pk').value = ''
           refreshCore()
         }
       } catch (err) {
-        alert(err.message)
+        appendConsoleLog('error', `Add Wallet Error: ${err.message}`)
+        showGlobalError(err.message)
       } finally {
         addBtn.disabled = false
       }
@@ -569,13 +888,13 @@ function initWalletsManager() {
       const amountEth = document.getElementById('fund-amount-input')?.value.trim()
       const statusEl = document.getElementById('batch-fund-status')
       if (!amountEth || parseFloat(amountEth) <= 0) {
-        alert('Please enter a valid ETH amount per wallet (e.g. 0.005).')
+        showGlobalError('Please enter a valid ETH amount per wallet (e.g. 0.005).')
         return
       }
 
       fundBtn.disabled = true
       fundBtn.innerHTML = '<span>⚡ Dispersing 1-Tx...</span>'
-      if (statusEl) statusEl.innerHTML = '<span style="color: var(--accent-dark);">Broadcasting Multicall3 transaction...</span>'
+      appendConsoleLog('fire', `Initiating Multicall3 1-Tx Batch Funding of ${amountEth} ETH / wallet...`)
 
       try {
         const res = await fetch(`${API}/wallets/fund-batch`, {
@@ -585,17 +904,20 @@ function initWalletsManager() {
         })
         const data = await res.json()
         if (!res.ok) {
-          if (statusEl) statusEl.innerHTML = `<span style="color: var(--danger);">Failed: ${data.error}</span>`
-          alert(`Funding Failed: ${data.error}`)
+          appendConsoleLog('error', `Multicall3 funding error: ${data.error}`)
+          if (statusEl) statusEl.innerHTML = `<span style="color: var(--red);">Failed: ${data.error}</span>`
+          showGlobalError(data.error)
         } else {
+          appendConsoleLog('success', `Multicall3 funded ${data.walletsFunded} wallets (${data.totalEthDistributed} ETH) in 1 Tx!`)
           if (statusEl) {
             statusEl.innerHTML = `<span style="color: var(--accent-dark);">✓ Multicall3 Funded ${data.walletsFunded} Wallets (${data.totalEthDistributed} ETH) in 1 Tx!</span>`
           }
-          alert(`✓ 1-Tx Multicall3 Successful! Distributed ${data.totalEthDistributed} ETH across ${data.walletsFunded} wallets.`)
           refreshCore()
         }
       } catch (err) {
-        if (statusEl) statusEl.innerHTML = `<span style="color: var(--danger);">${err.message}</span>`
+        appendConsoleLog('error', `Multicall3 Network Error: ${err.message}`)
+        if (statusEl) statusEl.innerHTML = `<span style="color: var(--red);">${err.message}</span>`
+        showGlobalError(err.message)
       } finally {
         fundBtn.disabled = false
         fundBtn.innerHTML = '<span>⚡ Disperse ETH</span>'
@@ -609,7 +931,7 @@ function initWalletsManager() {
       const recipientAddress = document.getElementById('sweep-vault-input')?.value.trim()
       const statusEl = document.getElementById('sweep-funds-status')
       if (!recipientAddress || !recipientAddress.startsWith('0x') || recipientAddress.length !== 42) {
-        alert('Please enter a valid 0x 40-character Cold Vault address.')
+        showGlobalError('Please enter a valid 0x 40-character Cold Vault address.')
         return
       }
 
@@ -617,7 +939,7 @@ function initWalletsManager() {
 
       sweepBtn.disabled = true
       sweepBtn.innerHTML = '<span>Sweeping...</span>'
-      if (statusEl) statusEl.innerHTML = '<span>Sweeping balances...</span>'
+      appendConsoleLog('info', `Sweeping all remaining ETH dust to ${recipientAddress}...`)
 
       try {
         const res = await fetch(`${API}/wallets/sweep`, {
@@ -627,18 +949,21 @@ function initWalletsManager() {
         })
         const data = await res.json()
         if (!res.ok) {
-          if (statusEl) statusEl.innerHTML = `<span style="color: var(--danger);">Failed: ${data.error}</span>`
-          alert(`Sweep Failed: ${data.error}`)
+          appendConsoleLog('error', `Sweep Error: ${data.error}`)
+          if (statusEl) statusEl.innerHTML = `<span style="color: var(--red);">Failed: ${data.error}</span>`
+          showGlobalError(data.error)
         } else {
           const sweptCount = data.results?.filter((r) => r.hash && !r.error)?.length || 0
+          appendConsoleLog('success', `Swept dust from ${sweptCount} burner wallets to cold vault!`)
           if (statusEl) {
             statusEl.innerHTML = `<span style="color: var(--accent-dark);">✓ Swept from ${sweptCount} wallets to vault!</span>`
           }
-          alert(`✓ Swept ETH dust from ${sweptCount} wallets back to ${recipientAddress}!`)
           refreshCore()
         }
       } catch (err) {
-        if (statusEl) statusEl.innerHTML = `<span style="color: var(--danger);">${err.message}</span>`
+        appendConsoleLog('error', `Sweep Network Error: ${err.message}`)
+        if (statusEl) statusEl.innerHTML = `<span style="color: var(--red);">${err.message}</span>`
+        showGlobalError(err.message)
       } finally {
         sweepBtn.disabled = false
         sweepBtn.innerHTML = '<span>Sweep All</span>'
@@ -690,6 +1015,7 @@ function renderWalletsTab() {
       const idx = btn.getAttribute('data-idx')
       if (confirm(`Remove Wallet ${idx} from vault?`)) {
         await fetch(`${API}/wallets/${idx}`, { method: 'DELETE' })
+        appendConsoleLog('info', `Removed Wallet ${idx} from vault.`)
         refreshCore()
       }
     })
@@ -706,6 +1032,7 @@ function renderWalletsTab() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ label: newName.trim() }),
         })
+        appendConsoleLog('info', `Renamed Wallet ${idx} to "${newName.trim()}".`)
         refreshCore()
       }
     })
@@ -713,7 +1040,7 @@ function renderWalletsTab() {
 }
 
 // ==========================================
-// 7. ANALYZER TAB
+// 9. ANALYZER TAB
 // ==========================================
 function initAnalyzerTab() {
   const btn = document.getElementById('analyze-btn')
@@ -728,6 +1055,7 @@ function initAnalyzerTab() {
 
       btn.disabled = true
       btn.innerText = 'Probing...'
+      appendConsoleLog('info', `Probing target contract: ${target}`)
 
       try {
         const res = await fetch(`${API}/analyze`, {
@@ -736,9 +1064,12 @@ function initAnalyzerTab() {
           body: JSON.stringify({ target }),
         })
         const data = await res.json()
-        if (!res.ok) alert(data.error)
-        else if (data?.analysis) {
+        if (!res.ok) {
+          appendConsoleLog('error', `Analyzer error: ${data.error}`)
+          showGlobalError(data.error)
+        } else if (data?.analysis) {
           const a = data.analysis
+          appendConsoleLog('success', `Analysis completed for ${a.contractAddress} (Verified: ${a.isVerified})`)
           if (resCard) resCard.style.display = 'block'
 
           let stagesHtml = ''
@@ -772,7 +1103,8 @@ function initAnalyzerTab() {
           }
         }
       } catch (err) {
-        alert(err.message)
+        appendConsoleLog('error', `Analyzer Network Failure: ${err.message}`)
+        showGlobalError(err.message)
       } finally {
         btn.disabled = false
         btn.innerText = 'Analyze'
@@ -782,7 +1114,7 @@ function initAnalyzerTab() {
 }
 
 // ==========================================
-// 8. GAS TRACKER
+// 10. GAS TRACKER
 // ==========================================
 async function initGasTracker() {
   try {

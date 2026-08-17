@@ -24,6 +24,15 @@ app.use(express.static(join(process.cwd(), 'public')))
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() })
 })
+app.get('/api/logs', async (_req, res) => {
+  const { getRecentLogs } = await import('../src/utils/logger.js')
+  res.json({ logs: getRecentLogs() })
+})
+app.delete('/api/logs', async (_req, res) => {
+  const { clearRecentLogs } = await import('../src/utils/logger.js')
+  clearRecentLogs()
+  res.json({ success: true })
+})
 app.use('/api/wallets', walletsRouter)
 app.use('/api/analyze', analyzeRouter)
 app.use('/api/gas', gasRouter)

@@ -30,8 +30,24 @@ function stripAnsi(str: string): string {
 
 type LogLevel = 'info' | 'success' | 'warn' | 'error' | 'fire' | 'block'
 
+const MAX_RECENT_LOGS = 200
+const recentLogs: Array<{ type: 'log'; level: LogLevel; message: string; timestamp: string }> = []
+
 function broadcast(level: LogLevel, message: string): void {
-  wsBridge.emit('ws', { type: 'log', level, message, timestamp: isoNow() })
+  const item = { type: 'log' as const, level, message, timestamp: isoNow() }
+  recentLogs.push(item)
+  if (recentLogs.length > MAX_RECENT_LOGS) {
+    recentLogs.shift()
+  }
+  wsBridge.emit('ws', item)
+}
+
+export function getRecentLogs(): Array<{ type: 'log'; level: LogLevel; message: string; timestamp: string }> {
+  return [...recentLogs]
+}
+
+export function clearRecentLogs(): void {
+  recentLogs.length = 0
 }
 
 export const logger = {
