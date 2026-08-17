@@ -142,23 +142,40 @@ async function probe<T>(
   }
 }
 
+// Fast in-memory cache for Blockscout ABIs
+const blockscoutAbiCache = new Map<string, unknown[] | null>()
+
 /**
- * Try to fetch a verified ABI from Blockscout.
- * Returns the parsed ABI or null if unverified.
+ * Try to fetch a verified ABI from Blockscout with a strict 600ms timeout.
+ * Returns the parsed ABI or null if unverified/timed out.
  */
 async function fetchAbiFromBlockscout(
   contractAddress: Address,
 ): Promise<unknown[] | null> {
+  const normalized = contractAddress.toLowerCase()
+  if (blockscoutAbiCache.has(normalized)) {
+    return blockscoutAbiCache.get(normalized)!
+  }
+
   try {
     const url = `https://robinhoodchain.blockscout.com/api?module=contract&action=getabi&address=${contractAddress}`
-    const res = await fetch(url)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 600)
+
+    const res = await fetch(url, { signal: controller.signal })
+    clearTimeout(timeoutId)
+
     const data = await res.json() as { status: string; result: string }
     if (data.status === '1') {
-      return JSON.parse(data.result) as unknown[]
+      const parsed = JSON.parse(data.result) as unknown[]
+      blockscoutAbiCache.set(normalized, parsed)
+      return parsed
     }
   } catch {
-    // Blockscout unavailable or contract not verified
+    // Blockscout timed out, unavailable, or contract unverified
   }
+
+  blockscoutAbiCache.set(normalized, null)
   return null
 }
 
