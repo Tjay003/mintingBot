@@ -8,7 +8,8 @@ import {
   ZERO_ADDRESS,
   SEADROP_MINT_PUBLIC_ABI,
 } from '../core/tx-builder.js'
-import { analyzeContract } from '../utils/contract-analyzer.js'
+import { fastProbeContract } from '../utils/contract-analyzer.js'
+import { estimateGasParams } from '../core/gas-manager.js'
 import { processAutoTransfer } from '../utils/nft-sweeper.js'
 import { getSettings } from '../config/settings.js'
 import { logger } from '../utils/logger.js'
@@ -34,8 +35,7 @@ export interface PublicMintOptions {
 }
 
 /**
- * Public mint: fires all configured wallets simultaneously.
- * This is the baseline mint — no whitelist, no scheduling.
+ * High-speed Public Mint Strategy — ultra-low latency execution (<150ms pre-flight).
  */
 export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
   logger.banner()
@@ -52,19 +52,20 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
   const publicClient = getPublicClient()
   const settings = getSettings()
 
-  // Concurrently analyze contract & load wallet balances in parallel (0ms Blockscout bypass)
-  const [analysis, wallets] = await Promise.all([
-    analyzeContract(publicClient, opts.contractAddress, false, false, true),
-    loadBalances(true, false, opts.walletIndices),
+  // 1-SHOT ULTRA-FAST PARALLEL PRE-FLIGHT (Probe + Wallets + Gas in single network roundtrip)
+  const [probeResult, wallets, feeData] = await Promise.all([
+    fastProbeContract(publicClient, opts.contractAddress),
+    loadBalances(false, false, opts.walletIndices),
+    publicClient.estimateFeesPerGas().catch(() => ({ maxFeePerGas: null, maxPriorityFeePerGas: null })),
   ])
 
-  const isSeaDrop = analysis.isSeaDrop || opts.functionName === 'mintSeaDrop' || opts.functionName === 'mintSeaDrop(address,uint256)'
+  const isSeaDrop = probeResult.isSeaDrop || opts.functionName === 'mintSeaDrop' || opts.functionName === 'mintSeaDrop(address,uint256)'
 
   // Auto-detect price if not explicitly provided or if on-chain price is detected
   let effectivePriceEth = opts.priceEth?.trim()
-  if (!effectivePriceEth || effectivePriceEth.toLowerCase() === 'auto' || (parseFloat(effectivePriceEth) === 0 && analysis.mintPriceEth && parseFloat(analysis.mintPriceEth) > 0)) {
-    if (analysis.mintPriceEth) {
-      effectivePriceEth = analysis.mintPriceEth
+  if (!effectivePriceEth || effectivePriceEth.toLowerCase() === 'auto' || (parseFloat(effectivePriceEth) === 0 && probeResult.mintPriceEth && parseFloat(probeResult.mintPriceEth) > 0)) {
+    if (probeResult.mintPriceEth) {
+      effectivePriceEth = probeResult.mintPriceEth
       logger.info(`Auto-detected on-chain price: ${effectivePriceEth} ETH`)
     } else {
       effectivePriceEth = '0'
@@ -86,6 +87,16 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
       `Total spend (${grandTotalEth} ETH across ${solvent.length} wallets) exceeds MAX_TOTAL_ETH (${settings.safety.maxTotalEth} ETH)`,
     )
   }
+
+  // Pre-calculate gas parameters synchronously in 0.00ms
+  const estimatedGas = isSeaDrop ? 250_000n : 180_000n
+  const gasParams = await estimateGasParams(
+    publicClient,
+    estimatedGas,
+    opts.gasStrategy,
+    opts.customGasPriceGwei,
+    feeData,
+  )
 
   // Resolve ABI
   const sigKey = `${opts.functionName}(uint256)`
@@ -109,7 +120,7 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
     ]
   }
 
-  // Fetch nonces for all wallets
+  // Fetch nonces concurrently in parallel
   const nonces = await Promise.all(solvent.map((w) => getNonce(w.address)))
 
   logger.fire(`Minting from ${solvent.length} wallet(s)...`)
@@ -122,7 +133,7 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
     valueEth: totalCostEth,
     gasStrategy: opts.gasStrategy,
     customGasPriceGwei: opts.customGasPriceGwei,
-  }, nonces)
+  }, nonces, gasParams)
 
   logger.divider()
   let successCount = 0

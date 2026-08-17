@@ -9,7 +9,7 @@ import {
   type TransactionReceipt,
 } from 'viem'
 import type { ManagedWallet } from '../wallets/manager.js'
-import { estimateGasParams, type GasStrategy } from './gas-manager.js'
+import { estimateGasParams, type GasStrategy, type GasParams } from './gas-manager.js'
 import { getSettings } from '../config/settings.js'
 import { logger } from '../utils/logger.js'
 
@@ -165,6 +165,7 @@ export async function executeParallelMint(
   wallets: ManagedWallet[],
   params: MintParams,
   nonces: number[],
+  precomputedGasParams?: GasParams,
 ): Promise<Array<{
   wallet: ManagedWallet
   hash?: string
@@ -186,34 +187,24 @@ export async function executeParallelMint(
     )
   }
 
-  // 1. Encode the function call once for all wallets
+  // 1. Encode the function call once for all wallets (0ms)
   const data = encodeFunctionData({
     abi: params.abi,
     functionName: params.functionName,
     args: params.args,
   })
 
-  // 2. Fetch gas params once for the entire batch in parallel
-  let estimatedGas = 220_000n
-  try {
-    if (wallets.length > 0) {
-      estimatedGas = await publicClient.estimateGas({
-        account: wallets[0].address,
-        to: params.contractAddress,
-        data,
-        value: valueWei,
-      })
-    }
-  } catch {
-    estimatedGas = 250_000n
+  // 2. Fetch or use precomputed gas params (0ms if precomputed)
+  let gasParams = precomputedGasParams
+  if (!gasParams) {
+    let estimatedGas = params.functionName.includes('SeaDrop') || params.functionName === 'mintPublic' ? 250_000n : 180_000n
+    gasParams = await estimateGasParams(
+      publicClient,
+      estimatedGas,
+      params.gasStrategy,
+      params.customGasPriceGwei,
+    )
   }
-
-  const gasParams = await estimateGasParams(
-    publicClient,
-    estimatedGas,
-    params.gasStrategy,
-    params.customGasPriceGwei,
-  )
 
   // 3. Build all transactions in-memory instantaneously (0ms)
   const txs: BuiltTransaction[] = wallets.map((w, i) => ({

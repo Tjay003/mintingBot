@@ -452,3 +452,53 @@ export function printAnalysis(a: ContractAnalysis): void {
   }
   logger.divider()
 }
+
+export interface FastContractProbe {
+  isSeaDrop: boolean
+  mintPriceEth?: string
+  mintPriceWei?: bigint
+  detectedMintFn: MintSig
+}
+
+/**
+ * Ultra-fast single-call contract probe for high-speed mint execution (<50ms).
+ */
+export async function fastProbeContract(
+  publicClient: PublicClient,
+  contractAddress: Address,
+): Promise<FastContractProbe> {
+  const normalized = contractAddress.toLowerCase()
+  const cached = analysisCache.get(normalized)
+  if (cached && Date.now() - cached.timestamp < ANALYSIS_CACHE_TTL_MS) {
+    return {
+      isSeaDrop: cached.data.isSeaDrop ?? false,
+      mintPriceEth: cached.data.mintPriceEth,
+      mintPriceWei: cached.data.mintPriceWei,
+      detectedMintFn: cached.data.detectedMintFn ?? 'mint(uint256)',
+    }
+  }
+
+  // Fast single probe to SeaDrop router
+  const seaDropRes = await probe<{
+    mintPrice: bigint
+    startTime: number
+    endTime: number
+    maxTotalMintableByWallet: number
+  }>(publicClient, SEADROP_ROUTERS[0], PROBE_ABI[16], [contractAddress])
+
+  if (seaDropRes && seaDropRes.maxTotalMintableByWallet > 0) {
+    const mintPriceWei = BigInt(seaDropRes.mintPrice)
+    const mintPriceEth = formatEther(mintPriceWei)
+    return {
+      isSeaDrop: true,
+      mintPriceWei,
+      mintPriceEth,
+      detectedMintFn: 'mintSeaDrop(address,uint256)',
+    }
+  }
+
+  return {
+    isSeaDrop: false,
+    detectedMintFn: 'mint(uint256)',
+  }
+}

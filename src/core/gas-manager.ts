@@ -26,12 +26,13 @@ export async function estimateGasParams(
   estimatedGas: bigint,
   strategy: GasStrategy = 'fast',
   customGasPriceGwei?: number,
+  prefetchedFeeData?: { maxFeePerGas?: bigint | null; maxPriorityFeePerGas?: bigint | null },
 ): Promise<GasParams> {
   const settings = getSettings()
   const maxAllowedWei = parseGwei(settings.safety.maxGasPriceGwei.toString())
 
-  // Fetch current fee data from chain
-  const feeData = await publicClient.estimateFeesPerGas()
+  // Fetch or use pre-fetched fee data from chain
+  const feeData = prefetchedFeeData ?? (await publicClient.estimateFeesPerGas().catch(() => ({ maxFeePerGas: parseGwei('1'), maxPriorityFeePerGas: parseGwei('0.001') })))
   const baseFee = feeData.maxFeePerGas ?? parseGwei('1')
   const priorityFee = feeData.maxPriorityFeePerGas ?? parseGwei('0.001')
 
