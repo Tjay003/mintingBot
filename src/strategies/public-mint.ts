@@ -52,9 +52,9 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
   const publicClient = getPublicClient()
   const settings = getSettings()
 
-  // Concurrently analyze contract & load wallet balances in parallel
+  // Concurrently analyze contract & load wallet balances in parallel (0ms Blockscout bypass)
   const [analysis, wallets] = await Promise.all([
-    analyzeContract(publicClient, opts.contractAddress, false, false),
+    analyzeContract(publicClient, opts.contractAddress, false, false, true),
     loadBalances(true, false, opts.walletIndices),
   ])
 

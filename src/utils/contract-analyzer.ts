@@ -221,6 +221,7 @@ export async function analyzeContract(
   contractAddress: Address,
   forceRefresh = false,
   includeDropStages = false,
+  skipBlockscout = false,
 ): Promise<ContractAnalysis> {
   if (!isAddress(contractAddress)) {
     throw new Error(`Invalid contract address: ${contractAddress}`)
@@ -234,7 +235,7 @@ export async function analyzeContract(
 
   logger.info(`Analyzing contract ${contractAddress}`)
 
-  // 1. Concurrently fetch verified ABI and probe states in parallel
+  // 1. Concurrently fetch verified ABI (if enabled) and probe states in parallel
   const [
     verifiedAbi,
     saleIsActive,
@@ -254,7 +255,7 @@ export async function analyzeContract(
     MAX_SUPPLY,
     seaDropStats,
   ] = await Promise.all([
-    fetchAbiFromBlockscout(contractAddress),
+    skipBlockscout ? Promise.resolve(null) : fetchAbiFromBlockscout(contractAddress),
     probe<boolean>(publicClient, contractAddress, PROBE_ABI[0]),
     probe<boolean>(publicClient, contractAddress, PROBE_ABI[1]),
     probe<boolean>(publicClient, contractAddress, PROBE_ABI[2]),
@@ -277,8 +278,8 @@ export async function analyzeContract(
 
   if (isVerified) {
     logger.success('Contract is verified on Blockscout — using full ABI')
-  } else {
-    logger.warn('Contract is NOT verified — probing common function signatures')
+  } else if (!skipBlockscout) {
+    logger.warn('Contract is NOT verified on Blockscout — probing common function signatures')
   }
 
   // 2. Detect mint functions

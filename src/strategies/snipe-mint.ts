@@ -55,9 +55,9 @@ export async function runSnipeMint(opts: SnipeMintOptions): Promise<void> {
   const wsClient = getWsPublicClient()
   const settings = getSettings()
 
-  // Concurrently analyze contract & load wallet balances in parallel
+  // Concurrently analyze contract & load wallet balances in parallel (0ms Blockscout bypass)
   const [analysis, wallets] = await Promise.all([
-    analyzeContract(publicClient, opts.contractAddress, false, false),
+    analyzeContract(publicClient, opts.contractAddress, false, false, true),
     loadBalances(true, false, opts.walletIndices),
   ])
 
