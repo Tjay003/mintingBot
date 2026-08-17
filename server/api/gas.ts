@@ -5,8 +5,8 @@ import { getEthUsdtPrice, calcGasCostUsdt } from '../utils/price.js'
 
 const router = Router()
 
-/** GET /api/gas — current gas prices on Robinhood Chain with USDT conversions */
-router.get('/', async (_req, res) => {
+/** GET /api/gas and /api/gas/current — current gas prices on Robinhood Chain with USDT conversions */
+const handleGas = async (_req: any, res: any) => {
   try {
     const client = getPublicClient()
     const feeData = await client.estimateFeesPerGas()
@@ -37,10 +37,18 @@ router.get('/', async (_req, res) => {
           usdtEst: calcGasCostUsdt(turboGwei, ethPriceUsdt),
         },
       },
+      rates: {
+        safe: { maxFeeGwei: safeGwei.toFixed(4) },
+        fast: { maxFeeGwei: fastGwei.toFixed(4) },
+        turbo: { maxFeeGwei: turboGwei.toFixed(4) },
+      },
     })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
-})
+}
+
+router.get('/', handleGas)
+router.get('/current', handleGas)
 
 export { router as gasRouter }

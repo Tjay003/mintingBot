@@ -5,7 +5,8 @@
   "description": "Full-featured NFT minting bot & drop sniper for Robinhood Chain & OpenSea. Multi-wallet, scheduled drops, gas manager, and contract analyzer.",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "tabs"
   ],
   "host_permissions": [
     "https://opensea.io/*",
