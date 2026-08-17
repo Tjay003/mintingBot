@@ -88,6 +88,8 @@ type MintSig = (typeof MINT_SIGNATURES)[number]
 
 export type WlType = 'merkle-proof' | 'signature' | 'none' | 'unknown'
 
+import { fetchOpenSeaDropStages, type OpenSeaDropStage } from './opensea-resolver.js'
+
 export interface SeaDropPublicDropInfo {
   mintPrice: bigint
   mintPriceEth: string
@@ -114,6 +116,7 @@ export interface ContractAnalysis {
   isVerified: boolean
   isSeaDrop?: boolean
   seaDropInfo?: SeaDropPublicDropInfo
+  dropStages?: OpenSeaDropStage[]
 }
 
 /**
@@ -338,6 +341,14 @@ export async function analyzeContract(
     (mintFunctions as readonly string[]).includes(sig),
   )
 
+  // Fetch OpenSea drop stages if this is a SeaDrop collection
+  let dropStages: OpenSeaDropStage[] | undefined
+  if (isSeaDrop) {
+    try {
+      dropStages = await fetchOpenSeaDropStages(contractAddress)
+    } catch {}
+  }
+
   return {
     contractAddress,
     mintFunctions,
@@ -353,6 +364,7 @@ export async function analyzeContract(
     isVerified,
     isSeaDrop,
     seaDropInfo,
+    dropStages,
   }
 }
 
@@ -366,7 +378,14 @@ export function printAnalysis(a: ContractAnalysis): void {
   logger.info(`Verified: ${a.isVerified ? '✓ Yes (Blockscout)' : '✗ No (probing signatures)'}`)
   logger.info(`WL Type:  ${a.wlType}`)
 
-  if (a.seaDropInfo) {
+  if (a.dropStages && a.dropStages.length > 0) {
+    logger.info(`[OpenSea Drop Stages Detected: ${a.dropStages.length} stage(s)]`)
+    for (const s of a.dropStages) {
+      const liveTag = s.isLive ? '🟢 LIVE NOW' : '🔴 UPCOMING'
+      logger.info(`  • Stage ${s.stageIndex}: ${s.label} (${s.stageType})`)
+      logger.info(`    Price: ${s.priceEth} ETH | Limit: ${s.maxTotalMintableByWallet} | Time: ${s.startTimeLocal} - ${s.endTimeLocal} [${liveTag}]`)
+    }
+  } else if (a.seaDropInfo) {
     logger.info(`[SeaDrop Stage Details]`)
     logger.info(`  Public Price:  ${a.seaDropInfo.mintPriceEth} ETH`)
     logger.info(`  Limit/Wallet:  ${a.seaDropInfo.maxTotalMintableByWallet}`)

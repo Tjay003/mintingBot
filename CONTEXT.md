@@ -39,6 +39,7 @@ MintBot supports 4 distinct minting archetypes with automatic detection:
 - **OpenSea Fee Recipient:** `0x0000a26b00c1f0df003000390027140000faa719`
 - **Function:** `mintPublic(address nftContract, address feeRecipient, address minterIfNotPayer, uint256 quantity)`
 - **Auto-Routing:** When a target contract implements `mintSeaDrop(address,uint256)`, the bot automatically routes the transaction to the SeaDrop router with the target contract as parameter.
+- **Stage Parser:** Extracts all OpenSea drop stages (`SIGNED_PRESALE`, `PUBLIC_SALE`, `ALLOW_LIST`) directly from collection metadata with interactive stage buttons in Schedule and Analyzer tabs.
 
 ### B. Standard Direct Mints (ERC-721 / ERC-1155)
 - Standard signatures probed: `mint(uint256)`, `publicMint(uint256)`, `claim(uint256)`, `freeMint()`, `mint()`.

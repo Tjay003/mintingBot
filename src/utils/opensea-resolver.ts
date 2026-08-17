@@ -8,10 +8,24 @@ import { logger } from './logger.js'
  */
 const ROBINHOOD_CHAIN_SLUGS = new Set(['robinhood-chain', 'robinhood', '4663'])
 
+export interface OpenSeaDropStage {
+  stageIndex: number
+  label: string
+  stageType: string
+  startTime: string
+  endTime: string
+  startTimeLocal: string
+  endTimeLocal: string
+  priceEth: string
+  maxTotalMintableByWallet: number
+  isLive: boolean
+}
+
 export interface ResolvedCollection {
   contractAddress: Address
   collectionName?: string
   chain: string
+  dropStages?: OpenSeaDropStage[]
 }
 
 /**
@@ -133,9 +147,95 @@ async function resolveFromCollectionSlug(slug: string): Promise<ResolvedCollecti
 
   logger.success(`Resolved "${slug}" → ${robinhoodContract.address} (${robinhoodContract.chain})`)
 
+  let dropStages: OpenSeaDropStage[] | undefined
+  try {
+    dropStages = await fetchOpenSeaDropStages(slug)
+  } catch {}
+
   return {
     contractAddress: robinhoodContract.address,
     collectionName: data.name,
     chain: robinhoodContract.chain,
+    dropStages,
   }
+}
+
+/**
+ * Scrapes and extracts all drop stages (GTD, AllowList, Public) from an OpenSea collection.
+ */
+export async function fetchOpenSeaDropStages(slugOrAddress: string): Promise<OpenSeaDropStage[]> {
+  let slug = slugOrAddress.trim()
+
+  // If address, resolve slug first
+  if (slug.startsWith('0x')) {
+    try {
+      const res = await fetch(`https://api.opensea.io/api/v2/chain/robinhood/contract/${slug}`, {
+        headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' },
+      })
+      if (res.ok) {
+        const json = (await res.json()) as { collection?: string }
+        if (json.collection) slug = json.collection
+      }
+    } catch {}
+  }
+
+  // Fetch OpenSea drop page HTML
+  const dropUrl = `https://opensea.io/collection/${slug}/drop`
+  const res = await fetch(dropUrl, {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    },
+  })
+
+  if (!res.ok) return []
+  const html = await res.text()
+
+  const stages: OpenSeaDropStage[] = []
+  const now = Date.now()
+
+  // Extract stage objects from HTML chunks
+  const stageRegex =
+    /"label":\s*"([^"]+)",\s*"stageType":\s*"([^"]+)",\s*"stageIndex":\s*(\d+),\s*"startTime":\s*"([^"]+)",\s*"endTime":\s*"([^"]+)",\s*"maxTotalMintableByWallet":\s*(\d+),\s*"price":\{[^}]*"unit":\s*([0-9\.]+)/g
+
+  let match: RegExpExecArray | null
+  while ((match = stageRegex.exec(html)) !== null) {
+    const label = match[1]
+    const stageType = match[2]
+    const stageIndex = parseInt(match[3], 10)
+    const startTime = match[4]
+    const endTime = match[5]
+    const maxTotalMintableByWallet = parseInt(match[6], 10)
+    const priceEth = match[7]
+
+    const startMs = new Date(startTime).getTime()
+    const endMs = new Date(endTime).getTime()
+    const isLive = now >= startMs && now <= endMs
+
+    stages.push({
+      stageIndex,
+      label,
+      stageType,
+      startTime,
+      endTime,
+      startTimeLocal: new Date(startTime).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        month: 'short',
+        day: 'numeric',
+      }),
+      endTimeLocal: new Date(endTime).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        month: 'short',
+        day: 'numeric',
+      }),
+      priceEth,
+      maxTotalMintableByWallet,
+      isLive,
+    })
+  }
+
+  return stages
 }

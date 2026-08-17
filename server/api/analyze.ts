@@ -41,6 +41,7 @@ router.post('/', async (req, res) => {
           endTimeIso: analysis.seaDropInfo.endTimeIso,
           isLive: analysis.seaDropInfo.isLive,
         } : null,
+        dropStages: analysis.dropStages ?? resolved.dropStages ?? [],
       },
     })
   } catch (err) {
