@@ -175,25 +175,55 @@ export async function executeParallelMint(
   receipt?: TransactionReceipt
 }>> {
   const overallStart = performance.now()
+  const settings = getSettings()
+  const valueWei = parseEther(params.valueEth)
 
-  // Build all transactions first (in parallel)
-  const buildResults = await Promise.allSettled(
-    wallets.map((w, i) => buildMintTransaction(publicClient, w, params, nonces[i])),
+  // Safety: check per-mint ETH limit
+  const maxPerMintWei = parseEther(settings.safety.maxEthPerMint.toString())
+  if (valueWei > maxPerMintWei) {
+    throw new Error(
+      `Mint value ${params.valueEth} ETH exceeds MAX_ETH_PER_MINT (${settings.safety.maxEthPerMint} ETH)`,
+    )
+  }
+
+  // 1. Encode the function call once for all wallets
+  const data = encodeFunctionData({
+    abi: params.abi,
+    functionName: params.functionName,
+    args: params.args,
+  })
+
+  // 2. Fetch gas params once for the entire batch in parallel
+  let estimatedGas = 220_000n
+  try {
+    if (wallets.length > 0) {
+      estimatedGas = await publicClient.estimateGas({
+        account: wallets[0].address,
+        to: params.contractAddress,
+        data,
+        value: valueWei,
+      })
+    }
+  } catch {
+    estimatedGas = 250_000n
+  }
+
+  const gasParams = await estimateGasParams(
+    publicClient,
+    estimatedGas,
+    params.gasStrategy,
+    params.customGasPriceGwei,
   )
 
-  const txs: BuiltTransaction[] = []
-  for (let i = 0; i < buildResults.length; i++) {
-    const result = buildResults[i]
-    if (result.status === 'rejected') {
-      logger.error(`Wallet ${wallets[i].index} build failed: ${result.reason}`)
-    } else {
-      txs.push(result.value)
-    }
-  }
-
-  if (txs.length === 0) {
-    throw new Error('All transaction builds failed — aborting mint')
-  }
+  // 3. Build all transactions in-memory instantaneously (0ms)
+  const txs: BuiltTransaction[] = wallets.map((w, i) => ({
+    wallet: w,
+    contractAddress: params.contractAddress,
+    data,
+    value: valueWei,
+    nonce: nonces[i],
+    ...gasParams,
+  }))
 
   logger.fire(`Firing ${txs.length} wallet(s) simultaneously!`)
 

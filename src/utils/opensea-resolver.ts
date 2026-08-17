@@ -28,21 +28,28 @@ export interface ResolvedCollection {
   dropStages?: OpenSeaDropStage[]
 }
 
+// Fast in-memory cache for resolved targets (10 min TTL)
+const targetResolutionCache = new Map<string, { data: ResolvedCollection; timestamp: number }>()
+const TARGET_CACHE_TTL_MS = 10 * 60 * 1000
+
 /**
  * Resolve an OpenSea URL or raw contract address to a contract address.
- *
- * Supported formats:
- *  - https://opensea.io/collection/<slug>
- *  - https://opensea.io/assets/robinhood-chain/<address>/<tokenId>
- *  - https://opensea.io/assets/robinhood/<address>/<tokenId>
- *  - 0x<address>   (raw address — passed through directly)
+ * Cached in memory for sub-millisecond instant execution.
  */
-export async function resolveTarget(input: string): Promise<ResolvedCollection> {
+export async function resolveTarget(input: string, fetchStages = false): Promise<ResolvedCollection> {
   const trimmed = input.trim()
+  const cacheKey = `${trimmed}:${fetchStages}`
+  const cached = targetResolutionCache.get(cacheKey)
+
+  if (cached && Date.now() - cached.timestamp < TARGET_CACHE_TTL_MS) {
+    return cached.data
+  }
 
   // Raw contract address
   if (isAddress(trimmed)) {
-    return { contractAddress: trimmed, chain: 'robinhood-chain' }
+    const res: ResolvedCollection = { contractAddress: trimmed, chain: 'robinhood-chain' }
+    targetResolutionCache.set(cacheKey, { data: res, timestamp: Date.now() })
+    return res
   }
 
   // Must be a URL from here
@@ -60,17 +67,19 @@ export async function resolveTarget(input: string): Promise<ResolvedCollection> 
   const parts = url.pathname.split('/').filter(Boolean)
   // parts[0] = "collection" | "assets"
 
+  let result: ResolvedCollection
   if (parts[0] === 'assets') {
     // Format: /assets/<chain>/<address>/<tokenId>
-    return resolveFromAssetUrl(parts)
-  }
-
-  if (parts[0] === 'collection') {
+    result = resolveFromAssetUrl(parts)
+  } else if (parts[0] === 'collection') {
     // Format: /collection/<slug>
-    return resolveFromCollectionSlug(parts[1])
+    result = await resolveFromCollectionSlug(parts[1], fetchStages)
+  } else {
+    throw new Error(`Unrecognised OpenSea URL format: ${trimmed}`)
   }
 
-  throw new Error(`Unrecognised OpenSea URL format: ${trimmed}`)
+  targetResolutionCache.set(cacheKey, { data: result, timestamp: Date.now() })
+  return result
 }
 
 /**
@@ -101,7 +110,7 @@ function resolveFromAssetUrl(parts: string[]): ResolvedCollection {
  * Resolve a collection slug to a contract address via OpenSea API.
  * https://opensea.io/collection/<slug> → GET /api/v2/collections/<slug>
  */
-async function resolveFromCollectionSlug(slug: string): Promise<ResolvedCollection> {
+async function resolveFromCollectionSlug(slug: string, fetchStages = false): Promise<ResolvedCollection> {
   if (!slug) throw new Error('Collection slug is empty in the OpenSea URL.')
 
   const settings = getSettings()
@@ -148,9 +157,11 @@ async function resolveFromCollectionSlug(slug: string): Promise<ResolvedCollecti
   logger.success(`Resolved "${slug}" → ${robinhoodContract.address} (${robinhoodContract.chain})`)
 
   let dropStages: OpenSeaDropStage[] | undefined
-  try {
-    dropStages = await fetchOpenSeaDropStages(slug)
-  } catch {}
+  if (fetchStages) {
+    try {
+      dropStages = await fetchOpenSeaDropStages(slug)
+    } catch {}
+  }
 
   return {
     contractAddress: robinhoodContract.address,

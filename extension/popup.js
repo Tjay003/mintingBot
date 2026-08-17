@@ -505,6 +505,7 @@ function initSnipeTab() {
       startBtn.disabled = true
       startBtn.innerHTML = '<span>⚡ FIRING...</span>'
       appendConsoleLog('fire', `Firing Blast Mint Session for target: ${target} [Mode: ${mode.toUpperCase()}]`)
+      switchToTab('tab-console')
 
       try {
         const res = await fetch(`${API}/session/start`, {
@@ -680,6 +681,8 @@ function initScheduleTab() {
 
       submitBtn.disabled = true
       submitBtn.innerHTML = '<span>Arming Schedule...</span>'
+      appendConsoleLog('info', `Arming scheduled mint for ${mintTime} on ${target}...`)
+      switchToTab('tab-console')
 
       try {
         const res = await fetch(`${API}/session/start`, {
@@ -701,8 +704,7 @@ function initScheduleTab() {
           appendConsoleLog('error', `Schedule Error: ${json.error}`)
           showGlobalError(json.error)
         } else {
-          appendConsoleLog('success', `Scheduled mint successfully armed for ${mintTime}!`)
-          switchToTab('tab-snipe')
+          appendConsoleLog('success', `Scheduled mint successfully armed for ${mintTime}! T-0 blast ready.`)
         }
       } catch (err) {
         appendConsoleLog('error', `Schedule Network Error: ${err.message}`)
@@ -895,6 +897,7 @@ function initWalletsManager() {
       fundBtn.disabled = true
       fundBtn.innerHTML = '<span>⚡ Dispersing 1-Tx...</span>'
       appendConsoleLog('fire', `Initiating Multicall3 1-Tx Batch Funding of ${amountEth} ETH / wallet...`)
+      switchToTab('tab-console')
 
       try {
         const res = await fetch(`${API}/wallets/fund-batch`, {
@@ -940,6 +943,7 @@ function initWalletsManager() {
       sweepBtn.disabled = true
       sweepBtn.innerHTML = '<span>Sweeping...</span>'
       appendConsoleLog('info', `Sweeping all remaining ETH dust to ${recipientAddress}...`)
+      switchToTab('tab-console')
 
       try {
         const res = await fetch(`${API}/wallets/sweep`, {

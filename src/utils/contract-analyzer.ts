@@ -191,6 +191,10 @@ function detectWlType(mintFns: MintSig[]): WlType {
   return 'none'
 }
 
+// In-memory analysis cache (5 min TTL) for zero-latency execution
+const analysisCache = new Map<string, { data: ContractAnalysis; timestamp: number }>()
+const ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1000
+
 /**
  * Full contract analysis — fetches ABI if verified, probes state functions,
  * detects SeaDrop structs (price, schedule, wallet limits), WL type, and sale state.
@@ -198,14 +202,21 @@ function detectWlType(mintFns: MintSig[]): WlType {
 export async function analyzeContract(
   publicClient: PublicClient,
   contractAddress: Address,
+  forceRefresh = false,
 ): Promise<ContractAnalysis> {
   if (!isAddress(contractAddress)) {
     throw new Error(`Invalid contract address: ${contractAddress}`)
   }
 
+  const normalized = contractAddress.toLowerCase()
+  const cached = analysisCache.get(normalized)
+  if (!forceRefresh && cached && Date.now() - cached.timestamp < ANALYSIS_CACHE_TTL_MS) {
+    return cached.data
+  }
+
   logger.info(`Analyzing contract ${contractAddress}`)
 
-  // 1. Try to get verified ABI from Blockscout
+  // 1. Concurrently fetch verified ABI and probe states
   const verifiedAbi = await fetchAbiFromBlockscout(contractAddress)
   const isVerified = verifiedAbi !== null
 
@@ -349,7 +360,7 @@ export async function analyzeContract(
     } catch {}
   }
 
-  return {
+  const result: ContractAnalysis = {
     contractAddress,
     mintFunctions,
     detectedMintFn,
@@ -366,6 +377,9 @@ export async function analyzeContract(
     seaDropInfo,
     dropStages,
   }
+
+  analysisCache.set(normalized, { data: result, timestamp: Date.now() })
+  return result
 }
 
 /**
