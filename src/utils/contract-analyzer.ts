@@ -203,6 +203,7 @@ export async function analyzeContract(
   publicClient: PublicClient,
   contractAddress: Address,
   forceRefresh = false,
+  includeDropStages = false,
 ): Promise<ContractAnalysis> {
   if (!isAddress(contractAddress)) {
     throw new Error(`Invalid contract address: ${contractAddress}`)
@@ -216,8 +217,45 @@ export async function analyzeContract(
 
   logger.info(`Analyzing contract ${contractAddress}`)
 
-  // 1. Concurrently fetch verified ABI and probe states
-  const verifiedAbi = await fetchAbiFromBlockscout(contractAddress)
+  // 1. Concurrently fetch verified ABI and probe states in parallel
+  const [
+    verifiedAbi,
+    saleIsActive,
+    publicSaleActive,
+    mintEnabled,
+    paused,
+    mintPriceRaw,
+    priceRaw,
+    costRaw,
+    PRICE_raw,
+    publicMintPriceRaw,
+    maxPerWallet,
+    maxMintPerWallet,
+    MAX_PER_WALLET,
+    totalSupply,
+    maxSupply,
+    MAX_SUPPLY,
+    seaDropStats,
+  ] = await Promise.all([
+    fetchAbiFromBlockscout(contractAddress),
+    probe<boolean>(publicClient, contractAddress, PROBE_ABI[0]),
+    probe<boolean>(publicClient, contractAddress, PROBE_ABI[1]),
+    probe<boolean>(publicClient, contractAddress, PROBE_ABI[2]),
+    probe<boolean>(publicClient, contractAddress, PROBE_ABI[3]),
+    probe<bigint>(publicClient, contractAddress, PROBE_ABI[4]),
+    probe<bigint>(publicClient, contractAddress, PROBE_ABI[5]),
+    probe<bigint>(publicClient, contractAddress, PROBE_ABI[6]),
+    probe<bigint>(publicClient, contractAddress, PROBE_ABI[7]),
+    probe<bigint>(publicClient, contractAddress, PROBE_ABI[8]),
+    probe<bigint>(publicClient, contractAddress, PROBE_ABI[9]),
+    probe<bigint>(publicClient, contractAddress, PROBE_ABI[10]),
+    probe<bigint>(publicClient, contractAddress, PROBE_ABI[11]),
+    probe<bigint>(publicClient, contractAddress, PROBE_ABI[12]),
+    probe<bigint>(publicClient, contractAddress, PROBE_ABI[13]),
+    probe<bigint>(publicClient, contractAddress, PROBE_ABI[14]),
+    probe<[bigint, bigint, bigint]>(publicClient, contractAddress, PROBE_ABI[15], [zeroAddress]),
+  ])
+
   const isVerified = verifiedAbi !== null
 
   if (isVerified) {
@@ -237,54 +275,21 @@ export async function analyzeContract(
   const isSeaDrop = mintFunctions.includes('mintSeaDrop(address,uint256)') ||
     (verifiedAbi?.some((item: any) => item.name === 'mintSeaDrop') ?? false)
 
-  // 3. Probe standard state variables & SeaDrop structs
-  const [
-    saleIsActive,
-    publicSaleActive,
-    mintEnabled,
-    paused,
-    mintPriceRaw,
-    priceRaw,
-    costRaw,
-    PRICE_raw,
-    publicMintPriceRaw,
-    maxPerWallet,
-    maxMintPerWallet,
-    MAX_PER_WALLET,
-    totalSupply,
-    maxSupply,
-    MAX_SUPPLY,
-    seaDropStats,
-  ] = await Promise.all([
-    probe<boolean>(publicClient, contractAddress, PROBE_ABI[0]),
-    probe<boolean>(publicClient, contractAddress, PROBE_ABI[1]),
-    probe<boolean>(publicClient, contractAddress, PROBE_ABI[2]),
-    probe<boolean>(publicClient, contractAddress, PROBE_ABI[3]),
-    probe<bigint>(publicClient, contractAddress, PROBE_ABI[4]),
-    probe<bigint>(publicClient, contractAddress, PROBE_ABI[5]),
-    probe<bigint>(publicClient, contractAddress, PROBE_ABI[6]),
-    probe<bigint>(publicClient, contractAddress, PROBE_ABI[7]),
-    probe<bigint>(publicClient, contractAddress, PROBE_ABI[8]),
-    probe<bigint>(publicClient, contractAddress, PROBE_ABI[9]),
-    probe<bigint>(publicClient, contractAddress, PROBE_ABI[10]),
-    probe<bigint>(publicClient, contractAddress, PROBE_ABI[11]),
-    probe<bigint>(publicClient, contractAddress, PROBE_ABI[12]),
-    probe<bigint>(publicClient, contractAddress, PROBE_ABI[13]),
-    probe<bigint>(publicClient, contractAddress, PROBE_ABI[14]),
-    probe<[bigint, bigint, bigint]>(publicClient, contractAddress, PROBE_ABI[15], [zeroAddress]),
-  ])
-
-  // Probe SeaDrop getPublicDrop across known routers (queried on the router address)
+  // 3. Parallel SeaDrop router probe (queried on the router address)
   let seaDropInfo: SeaDropPublicDropInfo | undefined
   if (isSeaDrop) {
-    for (const router of SEADROP_ROUTERS) {
-      const pd = await probe<{
-        mintPrice: bigint
-        startTime: number
-        endTime: number
-        maxTotalMintableByWallet: number
-      }>(publicClient, router, PROBE_ABI[16], [contractAddress])
+    const routerProbes = await Promise.all(
+      SEADROP_ROUTERS.map((router) =>
+        probe<{
+          mintPrice: bigint
+          startTime: number
+          endTime: number
+          maxTotalMintableByWallet: number
+        }>(publicClient, router, PROBE_ABI[16], [contractAddress]),
+      ),
+    )
 
+    for (const pd of routerProbes) {
       if (pd && pd.maxTotalMintableByWallet > 0) {
         const now = Math.floor(Date.now() / 1000)
         const start = Number(pd.startTime)
@@ -352,9 +357,9 @@ export async function analyzeContract(
     (mintFunctions as readonly string[]).includes(sig),
   )
 
-  // Fetch OpenSea drop stages if this is a SeaDrop collection
+  // Fetch OpenSea drop stages only if requested
   let dropStages: OpenSeaDropStage[] | undefined
-  if (isSeaDrop) {
+  if (isSeaDrop && includeDropStages) {
     try {
       dropStages = await fetchOpenSeaDropStages(contractAddress)
     } catch {}

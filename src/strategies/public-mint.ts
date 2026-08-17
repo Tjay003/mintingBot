@@ -52,8 +52,12 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
   const publicClient = getPublicClient()
   const settings = getSettings()
 
-  // Analyze contract to check if it is OpenSea SeaDrop & detect price
-  const analysis = await analyzeContract(publicClient, opts.contractAddress)
+  // Concurrently analyze contract & load wallet balances in parallel
+  const [analysis, wallets] = await Promise.all([
+    analyzeContract(publicClient, opts.contractAddress, false, false),
+    loadBalances(true, false, opts.walletIndices),
+  ])
+
   const isSeaDrop = analysis.isSeaDrop || opts.functionName === 'mintSeaDrop' || opts.functionName === 'mintSeaDrop(address,uint256)'
 
   // Auto-detect price if not explicitly provided or if on-chain price is detected
@@ -67,8 +71,6 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
     }
   }
 
-  // Load and filter wallets by balance
-  const wallets = await loadBalances(true, false, opts.walletIndices)
   const totalCostEth = (parseFloat(effectivePriceEth) * opts.quantity).toString()
   const totalCostWei = parseEther(totalCostEth)
 

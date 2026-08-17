@@ -48,8 +48,11 @@ export async function runWhitelistMint(opts: WhitelistMintOptions): Promise<void
   const publicClient = getPublicClient()
   const settings = getSettings()
 
-  // Analyze contract to check if it is OpenSea SeaDrop & detect price
-  const analysis = await analyzeContract(publicClient, opts.contractAddress)
+  // Concurrently analyze contract & load wallet balances in parallel
+  const [analysis, wallets] = await Promise.all([
+    analyzeContract(publicClient, opts.contractAddress, false, false),
+    loadBalances(true, false, opts.walletIndices),
+  ])
   const isSeaDrop = Boolean(analysis.isSeaDrop)
 
   let effectivePriceEth = opts.priceEth?.trim()
@@ -110,8 +113,6 @@ export async function runWhitelistMint(opts: WhitelistMintOptions): Promise<void
 
   const totalCostEth = (parseFloat(effectivePriceEth) * opts.quantity).toString()
   const totalCostWei = parseEther(totalCostEth)
-
-  const wallets = await loadBalances(true, false, opts.walletIndices)
   const solvent = filterSolventWallets(wallets, totalCostWei)
 
   if (solvent.length === 0) {
