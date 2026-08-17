@@ -2,70 +2,256 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>MintBot Sniper</title>
+  <title>MintBot Suite</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <!-- Header -->
-  <div class="popup-header">
-    <div class="popup-brand">
-      <img src="icons/icon48.png" alt="MintBot">
-      <span>MINTBOT</span>
+  <div class="header">
+    <div class="brand">
+      <img src="icons/icon48.png" class="brand-icon" alt="MintBot">
+      <span>MintBot</span>
+      <span class="brand-badge">Robinhood Chain</span>
     </div>
     <div id="status-pill" class="status-pill status-offline">
       <span>CORE: OFF</span>
     </div>
   </div>
 
-  <!-- Detected Active Tab Target -->
-  <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span class="label">Target Target / URL</span>
-      <span id="tab-detect-badge" style="font-size: 10px; color: var(--accent); font-weight: 700; cursor: pointer;">DETECT TAB</span>
-    </div>
-    <input type="text" id="target-input" class="input" placeholder="https://opensea.io/collection/..." />
+  <!-- Navigation Tabs -->
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-tab="tab-snipe">⚡ Snipe</button>
+    <button class="nav-tab" data-tab="tab-schedule">⏱️ Schedule</button>
+    <button class="nav-tab" data-tab="tab-wallets">👛 Wallets</button>
+    <button class="nav-tab" data-tab="tab-analyze">🔍 Analyzer</button>
+    <button class="nav-tab" data-tab="tab-gas">⛽ Gas</button>
   </div>
 
-  <!-- Mint Controls -->
-  <div class="grid-2" style="margin-bottom: 10px;">
-    <div>
-      <span class="label">Qty / Wallet</span>
-      <input type="number" id="qty-input" class="input" value="1" min="1" />
-    </div>
-    <div>
-      <span class="label">Gas Strategy</span>
-      <select id="gas-select" class="select">
-        <option value="turbo" selected>Turbo (2.5x)</option>
-        <option value="fast">Fast (1.5x)</option>
-        <option value="safe">Safe (1.0x)</option>
-      </select>
-    </div>
-  </div>
+  <!-- Tab Contents Container -->
+  <div class="tab-content-container">
+    
+    <!-- TAB 1: SNIPE / ACTIVE SESSION -->
+    <div id="tab-snipe" class="tab-pane active">
+      <div class="card">
+        <div class="form-group">
+          <div class="label">
+            <span>Target (OpenSea URL or 0x Address)</span>
+            <span id="detect-tab-btn" style="color: var(--accent-dark); font-size: 10px; cursor: pointer;">🔍 AUTO-DETECT TAB</span>
+          </div>
+          <input type="text" id="snipe-target" class="input" placeholder="https://opensea.io/collection/... or 0x..." />
+        </div>
 
-  <!-- Wallets Overview -->
-  <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span class="label">Active Wallets (<span id="wallets-count-text">0</span>)</span>
-      <span id="eth-price-text" style="font-size: 10px; color: var(--text-muted); font-weight: 700;">ETH: $0</span>
-    </div>
-    <div id="wallets-list" class="wallets-box">
-      <div style="color: var(--text-muted); font-size: 11px; text-align: center; padding: 10px;">
-        Core is offline. Run <code>npm run ui</code>
+        <div class="grid-2">
+          <div class="form-group">
+            <span class="label">Mint Mode</span>
+            <select id="snipe-mode" class="select">
+              <option value="public" selected>Public Mint</option>
+              <option value="whitelist">Whitelist Mint</option>
+              <option value="snipe">FCFS Snipe</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <span class="label">Gas Strategy</span>
+            <select id="snipe-gas" class="select">
+              <option value="turbo" selected>Turbo (2.5x)</option>
+              <option value="fast">Fast (1.5x)</option>
+              <option value="safe">Safe (1.0x)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <span class="label">Qty / Wallet</span>
+            <input type="number" id="snipe-qty" class="input" value="1" min="1" />
+          </div>
+          <div class="form-group">
+            <div class="label">
+              <span>Price (ETH)</span>
+              <span id="snipe-price-badge" style="font-size: 9px; color: var(--accent-dark);">AUTO</span>
+            </div>
+            <input type="text" id="snipe-price" class="input" value="0" placeholder="0 (Auto)" />
+          </div>
+        </div>
+
+        <!-- Wallets Selection -->
+        <div class="form-group">
+          <div class="label">
+            <span>Select Active Wallets</span>
+            <span id="snipe-toggle-wallets" style="color: var(--accent-dark); font-size: 10px; cursor: pointer;">Toggle All</span>
+          </div>
+          <div id="snipe-wallets-list" style="max-height: 110px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 4px; background: #FAFAFA;">
+            <div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 6px;">Loading wallets...</div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 10px;">
+          <button id="snipe-start-btn" class="btn btn-primary" style="flex: 1.5; padding: 10px;">
+            <span>⚡ BLAST MINT SESSION</span>
+          </button>
+          <button id="snipe-stop-btn" class="btn btn-danger btn-sm" style="flex: 0.6; display: none;">
+            <span>STOP</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Session Status / Logs -->
+      <div id="snipe-session-card" class="card" style="display: none;">
+        <div class="label" style="margin-bottom: 6px;">Live Mint Session Status</div>
+        <div id="snipe-session-info" style="font-size: 11px; margin-bottom: 6px; color: var(--text-sub);"></div>
+        <div id="snipe-log-box" class="log-box"></div>
       </div>
     </div>
+
+    <!-- TAB 2: SCHEDULE MINT -->
+    <div id="tab-schedule" class="tab-pane">
+      <div class="card">
+        <div class="form-group">
+          <div class="label">
+            <span>Target Collection</span>
+            <span id="sched-detect-btn" style="color: var(--accent-dark); font-size: 10px; cursor: pointer;">🔍 DETECT TAB</span>
+          </div>
+          <input type="text" id="sched-target" class="input" placeholder="https://opensea.io/collection/..." />
+        </div>
+
+        <!-- Detected OpenSea Stages Container -->
+        <div id="sched-stages-box" style="display: none; margin-bottom: 10px; padding: 10px; background: #F1F5F9; border: 1px solid var(--border); border-radius: 6px;">
+          <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;">Detected OpenSea Drop Stages (Click to Select):</div>
+          <div id="sched-stages-list" style="display: flex; flex-direction: column; gap: 4px;"></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <span class="label">Mint Date & Time</span>
+            <input type="datetime-local" id="sched-time" class="input" />
+          </div>
+          <div class="form-group">
+            <span class="label">Quantity</span>
+            <input type="number" id="sched-qty" class="input" value="1" min="1" />
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <span class="label">Price (ETH)</span>
+            <input type="text" id="sched-price" class="input" value="0" placeholder="0" />
+          </div>
+          <div class="form-group">
+            <span class="label">Gas Strategy</span>
+            <select id="sched-gas" class="select">
+              <option value="turbo" selected>Turbo (2.5x)</option>
+              <option value="fast">Fast (1.5x)</option>
+              <option value="safe">Safe (1.0x)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="label">
+            <span>Selected Wallets</span>
+            <span id="sched-toggle-wallets" style="color: var(--accent-dark); font-size: 10px; cursor: pointer;">Toggle All</span>
+          </div>
+          <div id="sched-wallets-list" style="max-height: 100px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 4px; background: #FAFAFA;"></div>
+        </div>
+
+        <!-- Summary -->
+        <div id="sched-summary" style="padding: 8px; background: var(--accent-light); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; font-size: 11px; margin-bottom: 10px; color: var(--text-main);">
+          <div>Wallets: <strong id="sched-sum-wallets">0</strong> | Total NFTs: <strong id="sched-sum-nfts">0</strong></div>
+          <div style="margin-top: 2px;">Estimated Cost: <strong id="sched-sum-cost">0.0000 ETH</strong></div>
+        </div>
+
+        <button id="sched-submit-btn" class="btn btn-primary" style="width: 100%; padding: 10px;">
+          <span>⏱️ ARM SCHEDULED MINT (T-0 BLAST)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB 3: WALLETS -->
+    <div id="tab-wallets" class="tab-pane">
+      <!-- Add Wallet Card -->
+      <div class="card">
+        <div class="label" style="margin-bottom: 8px;">Add New Wallet</div>
+        <div class="grid-2" style="margin-bottom: 8px;">
+          <input type="text" id="add-wallet-label" class="input" placeholder="Wallet Name (e.g. Sniper 1)" />
+          <input type="password" id="add-wallet-pk" class="input" placeholder="Private Key (0x...)" />
+        </div>
+        <button id="add-wallet-btn" class="btn btn-outline" style="width: 100%;">
+          <span>+ Add Wallet to Local Vault</span>
+        </button>
+      </div>
+
+      <!-- Wallets List -->
+      <div class="card">
+        <div class="label">
+          <span>Configured Wallets (<span id="wallets-tab-count">0</span>)</span>
+          <span id="wallets-eth-price" style="font-size: 10px; color: var(--text-muted);">ETH: $0</span>
+        </div>
+        <div id="wallets-tab-list" style="margin-top: 8px;">
+          <div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">Loading wallets...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: ANALYZER -->
+    <div id="tab-analyze" class="tab-pane">
+      <div class="card">
+        <div class="form-group">
+          <div class="label">
+            <span>Analyze Target (OpenSea URL or 0x Contract)</span>
+            <span id="analyze-detect-btn" style="color: var(--accent-dark); font-size: 10px; cursor: pointer;">🔍 CURRENT TAB</span>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <input type="text" id="analyze-input" class="input" placeholder="https://opensea.io/collection/... or 0x..." style="flex: 1;" />
+            <button id="analyze-btn" class="btn btn-primary btn-sm">Analyze</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Analysis Results -->
+      <div id="analyze-result-card" class="card" style="display: none;">
+        <div class="label" style="margin-bottom: 8px;">Contract Analysis Results</div>
+        <div id="analyze-details" style="font-size: 12px; line-height: 1.6;"></div>
+      </div>
+    </div>
+
+    <!-- TAB 5: GAS & SAFETY -->
+    <div id="tab-gas" class="tab-pane">
+      <div class="card">
+        <div class="label" style="margin-bottom: 8px;">Robinhood Chain Gas Tracker</div>
+        <div class="grid-3" style="text-align: center;">
+          <div style="padding: 8px; background: #F1F5F9; border-radius: 6px; border: 1px solid var(--border);">
+            <div style="font-size: 10px; color: var(--text-muted); font-weight: 700;">SAFE</div>
+            <div id="gas-safe-val" style="font-size: 13px; font-weight: 800; color: var(--accent-dark); margin-top: 2px;">--</div>
+          </div>
+          <div style="padding: 8px; background: #F1F5F9; border-radius: 6px; border: 1px solid var(--border);">
+            <div style="font-size: 10px; color: var(--text-muted); font-weight: 700;">FAST (1.5x)</div>
+            <div id="gas-fast-val" style="font-size: 13px; font-weight: 800; color: var(--accent-dark); margin-top: 2px;">--</div>
+          </div>
+          <div style="padding: 8px; background: var(--accent-light); border-radius: 6px; border: 1px solid rgba(16, 185, 129, 0.4);">
+            <div style="font-size: 10px; color: var(--accent-dark); font-weight: 700;">TURBO (2.5x)</div>
+            <div id="gas-turbo-val" style="font-size: 13px; font-weight: 800; color: var(--accent-dark); margin-top: 2px;">--</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="label" style="margin-bottom: 6px;">Safety Rules In Force</div>
+        <div style="font-size: 12px; color: var(--text-sub); line-height: 1.5;">
+          <p>• Max ETH Per Mint: <strong>0.05 ETH</strong></p>
+          <p>• Max Total Spend: <strong>0.50 ETH</strong></p>
+          <p>• Gas Cap Limit: <strong>100.0 Gwei</strong></p>
+          <p>• Parallel Execution: <strong>Sub-50ms Promise.allSettled</strong></p>
+        </div>
+      </div>
+    </div>
+
   </div>
 
-  <!-- Blast Button -->
-  <button id="blast-btn" class="btn-blast">
-    <span>⚡ BLAST ALL WALLETS</span>
-  </button>
-
-  <div id="feedback-box" style="display: none; margin-top: 8px; font-size: 11px; padding: 6px; border-radius: 6px; text-align: center;"></div>
-
-  <!-- Dashboard Link -->
-  <a href="http://localhost:3000" target="_blank" class="btn-dash">
-    Open Full Dashboard (localhost:3000) ↗
-  </a>
+  <!-- Footer -->
+  <div class="footer">
+    <span>MintBot Core: <strong id="core-text-status" style="color: var(--accent-dark);">Connected</strong></span>
+    <a href="http://localhost:3000" target="_blank">Full Dashboard ↗</a>
+  </div>
 
   <script src="popup.js"></script>
 </body>
