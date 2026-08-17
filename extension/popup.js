@@ -189,7 +189,7 @@ function initSnipeTab() {
         const json = await res.json()
         if (!res.ok) alert(json.error)
         else pollSession()
-      } catch (err: any) {
+      } catch (err) {
         alert(err.message)
       } finally {
         startBtn.disabled = false
@@ -347,7 +347,7 @@ function initScheduleTab() {
           // Switch to Snipe tab to see status
           document.querySelector('[data-tab="tab-snipe"]')?.click()
         }
-      } catch (err: any) {
+      } catch (err) {
         alert(err.message)
       } finally {
         submitBtn.disabled = false
@@ -509,7 +509,7 @@ function initWalletsManager() {
           document.getElementById('add-wallet-pk').value = ''
           refreshCore()
         }
-      } catch (err: any) {
+      } catch (err) {
         alert(err.message)
       } finally {
         addBtn.disabled = false
@@ -642,7 +642,7 @@ function initAnalyzerTab() {
             `
           }
         }
-      } catch (err: any) {
+      } catch (err) {
         alert(err.message)
       } finally {
         btn.disabled = false
