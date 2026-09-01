@@ -100,12 +100,15 @@ program
     'fast',
   )
   .option('--gas-price <gwei>', 'Custom gas price in Gwei (only for --gas-strategy custom)')
+  .option('-w, --wallets <indices>', 'Comma-separated wallet numbers to use (e.g. "1" or "1,2")')
   .option('-v, --vault <address>', 'Auto-transfer / sweep minted NFTs to cold vault address')
-  .action(async (target: string, opts: { quantity: string; price: string; function: string; gasStrategy: string; gasPrice?: string; vault?: string }) => {
+  .action(async (target: string, opts: { quantity: string; price: string; function: string; gasStrategy: string; gasPrice?: string; wallets?: string; vault?: string }) => {
     const spinner = ora('Resolving target...').start()
     try {
       const { contractAddress, collectionName } = await resolveTarget(target)
       spinner.succeed(`Target: ${contractAddress}${collectionName ? ` (${collectionName})` : ''}`)
+
+      const walletIndices = opts.wallets ? opts.wallets.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n)) : undefined
 
       await runPublicMint({
         contractAddress,
@@ -114,6 +117,7 @@ program
         priceEth: opts.price,
         gasStrategy: opts.gasStrategy as GasStrategy,
         customGasPriceGwei: opts.gasPrice ? parseFloat(opts.gasPrice) : undefined,
+        walletIndices,
         autoTransferVault: opts.vault as `0x${string}` | undefined,
       })
     } catch (err) {
@@ -137,12 +141,15 @@ program
     'turbo',
   )
   .option('--gas-price <gwei>', 'Custom gas price in Gwei (only for --gas-strategy custom)')
+  .option('-w, --wallets <indices>', 'Comma-separated wallet numbers to use (e.g. "1" or "1,2")')
   .option('-v, --vault <address>', 'Auto-transfer / sweep minted NFTs to cold vault address')
-  .action(async (target: string, opts: { quantity: string; price: string; function: string; gasStrategy: string; gasPrice?: string; vault?: string }) => {
+  .action(async (target: string, opts: { quantity: string; price: string; function: string; gasStrategy: string; gasPrice?: string; wallets?: string; vault?: string }) => {
     const spinner = ora('Resolving target...').start()
     try {
       const { contractAddress, collectionName } = await resolveTarget(target)
       spinner.succeed(`Target: ${contractAddress}${collectionName ? ` (${collectionName})` : ''}`)
+
+      const walletIndices = opts.wallets ? opts.wallets.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n)) : undefined
 
       await runSnipeMint({
         contractAddress,
@@ -151,6 +158,7 @@ program
         priceEth: opts.price,
         gasStrategy: opts.gasStrategy as GasStrategy,
         customGasPriceGwei: opts.gasPrice ? parseFloat(opts.gasPrice) : undefined,
+        walletIndices,
         autoTransferVault: opts.vault as `0x${string}` | undefined,
       })
     } catch (err) {
@@ -186,6 +194,7 @@ program
     'fast',
   )
   .option('--gas-price <gwei>', 'Custom gas price in Gwei (only for --gas-strategy custom)')
+  .option('-w, --wallets <indices>', 'Comma-separated wallet numbers to use (e.g. "1" or "1,2")')
   .option('-v, --vault <address>', 'Auto-transfer / sweep minted NFTs to cold vault address')
   .action(
     async (
@@ -199,6 +208,7 @@ program
         function?: string
         gasStrategy: string
         gasPrice?: string
+        wallets?: string
         vault?: string
       },
     ) => {
@@ -231,6 +241,8 @@ program
 
         logger.info(`WL mode: ${wlMode}`)
 
+        const walletIndices = opts.wallets ? opts.wallets.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n)) : undefined
+
         await runWhitelistMint({
           contractAddress,
           wlMode,
@@ -241,6 +253,7 @@ program
           priceEth: opts.price,
           gasStrategy: opts.gasStrategy as GasStrategy,
           customGasPriceGwei: opts.gasPrice ? parseFloat(opts.gasPrice) : undefined,
+          walletIndices,
           autoTransferVault: opts.vault as `0x${string}` | undefined,
         })
       } catch (err) {
@@ -266,6 +279,7 @@ program
     'turbo',
   )
   .option('--gas-price <gwei>', 'Custom gas price in Gwei (only for --gas-strategy custom)')
+  .option('-w, --wallets <indices>', 'Comma-separated wallet numbers to use (e.g. "1" or "1,2")')
   .option('-v, --vault <address>', 'Auto-transfer / sweep minted NFTs to cold vault address')
   .action(
     async (
@@ -277,6 +291,7 @@ program
         function: string
         gasStrategy: string
         gasPrice?: string
+        wallets?: string
         vault?: string
       },
     ) => {
@@ -284,6 +299,8 @@ program
       try {
         const { contractAddress, collectionName } = await resolveTarget(target)
         spinner.succeed(`Target: ${contractAddress}${collectionName ? ` (${collectionName})` : ''}`)
+
+        const walletIndices = opts.wallets ? opts.wallets.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n)) : undefined
 
         await runScheduledMint({
           contractAddress,
@@ -293,6 +310,7 @@ program
           mintTime: opts.time,
           gasStrategy: opts.gasStrategy as GasStrategy,
           customGasPriceGwei: opts.gasPrice ? parseFloat(opts.gasPrice) : undefined,
+          walletIndices,
           autoTransferVault: opts.vault as `0x${string}` | undefined,
         })
       } catch (err) {

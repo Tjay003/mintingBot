@@ -1,5 +1,5 @@
-import { parseEther, type Address, type Abi } from 'viem'
-import { getPublicClient, getWallets, loadBalances, filterSolventWallets, getNonce } from '../wallets/manager.js'
+import { parseEther, formatGwei, type Address, type Abi } from 'viem'
+import { getPublicClient, getWallets, filterSolventWallets, getNonce } from '../wallets/manager.js'
 import {
   executeParallelMint,
   COMMON_MINT_ABIS,
@@ -35,29 +35,45 @@ export interface PublicMintOptions {
 }
 
 /**
- * High-speed Public Mint Strategy — ultra-low latency execution (<150ms pre-flight).
+ * High-speed Public Mint Strategy — ultra-low latency execution (<100ms pre-flight).
  */
 export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
+  const publicClient = getPublicClient()
+  const settings = getSettings()
+
   logger.banner()
   logger.info(`Mode: Public Mint`)
   logger.info(`Contract: ${opts.contractAddress}`)
   logger.info(`Function: ${opts.functionName}(${opts.quantity})`)
-  logger.info(`Price: ${opts.priceEth} ETH × ${opts.quantity} = ${parseFloat(opts.priceEth) * opts.quantity} ETH per wallet`)
-  logger.info(`Gas strategy: ${opts.gasStrategy}`)
+  logger.info(`Price: ${opts.priceEth} ETH × ${opts.quantity} = ${parseFloat(opts.priceEth || '0') * opts.quantity} ETH per wallet`)
+  logger.info(`Gas strategy: ${opts.gasStrategy.toUpperCase()}`)
   if (opts.walletIndices && opts.walletIndices.length > 0) {
     logger.info(`Selected wallets: Wallet ${opts.walletIndices.join(', Wallet ')}`)
   }
   logger.divider()
 
-  const publicClient = getPublicClient()
-  const settings = getSettings()
+  const preFlightStart = performance.now()
+  logger.info(`⚡ [PRE-FLIGHT] Running instant parallel pre-flight (Route, Balances, Nonces, Gas)...`)
 
-  // 1-SHOT ULTRA-FAST PARALLEL PRE-FLIGHT (Probe + Wallets + Gas in single network roundtrip)
-  const [probeResult, wallets, feeData] = await Promise.all([
+  const rawWallets = getWallets(false)
+  const targetWallets = opts.walletIndices && opts.walletIndices.length > 0
+    ? rawWallets.filter((w) => opts.walletIndices!.includes(w.index))
+    : rawWallets
+
+  // 1-SHOT ULTRA-FAST PARALLEL PRE-FLIGHT (Route Probe + Balances + Nonces + Gas in single network batch)
+  const [probeResult, balances, nonces, feeData] = await Promise.all([
     fastProbeContract(publicClient, opts.contractAddress),
-    loadBalances(false, false, opts.walletIndices),
+    Promise.all(targetWallets.map((w) => publicClient.getBalance({ address: w.address }))),
+    Promise.all(targetWallets.map((w) => getNonce(w.address))),
     publicClient.estimateFeesPerGas().catch(() => ({ maxFeePerGas: null, maxPriorityFeePerGas: null })),
   ])
+
+  const preFlightDurationMs = Math.round(performance.now() - preFlightStart)
+
+  // Attach balances
+  targetWallets.forEach((w, i) => {
+    w.balance = balances[i]
+  })
 
   const isSeaDrop = probeResult.isSeaDrop || opts.functionName === 'mintSeaDrop' || opts.functionName === 'mintSeaDrop(address,uint256)'
 
@@ -66,7 +82,7 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
   if (!effectivePriceEth || effectivePriceEth.toLowerCase() === 'auto' || (parseFloat(effectivePriceEth) === 0 && probeResult.mintPriceEth && parseFloat(probeResult.mintPriceEth) > 0)) {
     if (probeResult.mintPriceEth) {
       effectivePriceEth = probeResult.mintPriceEth
-      logger.info(`Auto-detected on-chain price: ${effectivePriceEth} ETH`)
+      logger.info(`✓ [PRICE] Auto-detected on-chain price: ${effectivePriceEth} ETH`)
     } else {
       effectivePriceEth = '0'
     }
@@ -75,10 +91,16 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
   const totalCostEth = (parseFloat(effectivePriceEth) * opts.quantity).toString()
   const totalCostWei = parseEther(totalCostEth)
 
-  const solvent = filterSolventWallets(wallets, totalCostWei)
+  const solvent = filterSolventWallets(targetWallets, totalCostWei)
   if (solvent.length === 0) {
     throw new Error('No wallets have sufficient balance to mint.')
   }
+
+  // Filter matched nonces for solvent wallets
+  const solventNonces = solvent.map((w) => {
+    const origIdx = targetWallets.findIndex((tw) => tw.index === w.index)
+    return nonces[origIdx]
+  })
 
   // Safety: total spend check
   const grandTotalEth = parseFloat(totalCostEth) * solvent.length
@@ -98,7 +120,7 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
     feeData,
   )
 
-  // Resolve ABI
+  // Resolve ABI and Routing
   const sigKey = `${opts.functionName}(uint256)`
   const resolvedAbi: Abi = opts.abi ?? [COMMON_MINT_ABIS[sigKey] ?? COMMON_MINT_ABIS['mint(uint256)']]
 
@@ -108,7 +130,6 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
   let targetArgs: unknown[] = [BigInt(opts.quantity)]
 
   if (isSeaDrop) {
-    logger.info(`Detected OpenSea SeaDrop launchpad — routing mint via SeaDrop Router`)
     targetAddress = SEADROP_ROUTER_ADDRESS
     targetAbi = SEADROP_MINT_PUBLIC_ABI
     targetFunctionName = 'mintPublic'
@@ -120,10 +141,11 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
     ]
   }
 
-  // Fetch nonces concurrently in parallel
-  const nonces = await Promise.all(solvent.map((w) => getNonce(w.address)))
-
-  logger.fire(`Minting from ${solvent.length} wallet(s)...`)
+  logger.info(`✓ [PRE-FLIGHT] Ready in ${preFlightDurationMs}ms`)
+  logger.info(`ℹ [ROUTING] ${isSeaDrop ? `OpenSea SeaDrop Router (${SEADROP_ROUTER_ADDRESS})` : `Direct Contract (${opts.contractAddress})`}`)
+  logger.info(`ℹ [NONCES] Synchronized: ${solvent.map((w, idx) => `Wallet ${w.index} (#${solventNonces[idx]})`).join(', ')}`)
+  logger.info(`ℹ [GAS] ${opts.gasStrategy.toUpperCase()} | MaxFee: ${formatGwei(gasParams.maxFeePerGas)} Gwei | PriorityFee: ${formatGwei(gasParams.maxPriorityFeePerGas)} Gwei`)
+  logger.fire(`🚀 [DISPATCH] Firing ${solvent.length} wallet(s) simultaneously!`)
 
   const results = await executeParallelMint(publicClient, solvent, {
     contractAddress: targetAddress,
@@ -133,7 +155,7 @@ export async function runPublicMint(opts: PublicMintOptions): Promise<void> {
     valueEth: totalCostEth,
     gasStrategy: opts.gasStrategy,
     customGasPriceGwei: opts.customGasPriceGwei,
-  }, nonces, gasParams)
+  }, solventNonces, gasParams)
 
   logger.divider()
   let successCount = 0

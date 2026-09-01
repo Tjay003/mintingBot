@@ -458,6 +458,7 @@ export interface FastContractProbe {
   mintPriceEth?: string
   mintPriceWei?: bigint
   detectedMintFn: MintSig
+  maxTotalMintableByWallet?: number
 }
 
 /**
@@ -475,8 +476,11 @@ export async function fastProbeContract(
       mintPriceEth: cached.data.mintPriceEth,
       mintPriceWei: cached.data.mintPriceWei,
       detectedMintFn: cached.data.detectedMintFn ?? 'mint(uint256)',
+      maxTotalMintableByWallet: cached.data.maxPerWallet ? Number(cached.data.maxPerWallet) : undefined,
     }
   }
+
+  const probeStart = performance.now()
 
   // Fast single probe to SeaDrop router
   const seaDropRes = await probe<{
@@ -486,19 +490,50 @@ export async function fastProbeContract(
     maxTotalMintableByWallet: number
   }>(publicClient, SEADROP_ROUTERS[0], PROBE_ABI[16], [contractAddress])
 
+  const probeDurationMs = Math.round(performance.now() - probeStart)
+
   if (seaDropRes && seaDropRes.maxTotalMintableByWallet > 0) {
     const mintPriceWei = BigInt(seaDropRes.mintPrice)
     const mintPriceEth = formatEther(mintPriceWei)
-    return {
+    const maxLimit = Number(seaDropRes.maxTotalMintableByWallet)
+    const res: FastContractProbe = {
       isSeaDrop: true,
       mintPriceWei,
       mintPriceEth,
       detectedMintFn: 'mintSeaDrop(address,uint256)',
+      maxTotalMintableByWallet: maxLimit,
     }
+    analysisCache.set(normalized, {
+      data: {
+        contractAddress,
+        mintFunctions: ['mintSeaDrop(address,uint256)'],
+        detectedMintFn: 'mintSeaDrop(address,uint256)',
+        wlType: 'none',
+        isVerified: false,
+        isSeaDrop: true,
+        mintPriceWei,
+        mintPriceEth,
+        maxPerWallet: BigInt(maxLimit),
+      },
+      timestamp: Date.now(),
+    })
+    return res
   }
 
-  return {
+  const res: FastContractProbe = {
     isSeaDrop: false,
     detectedMintFn: 'mint(uint256)',
   }
+  analysisCache.set(normalized, {
+    data: {
+      contractAddress,
+      mintFunctions: ['mint(uint256)'],
+      detectedMintFn: 'mint(uint256)',
+      wlType: 'none',
+      isVerified: false,
+      isSeaDrop: false,
+    },
+    timestamp: Date.now(),
+  })
+  return res
 }

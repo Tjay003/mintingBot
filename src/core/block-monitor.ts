@@ -212,15 +212,20 @@ export async function sleepUntil(targetTime: Date, signal?: AbortSignal): Promis
     logger.info(`10 seconds to mint time — standby...`)
   }
 
-  // Rapid poll the last 10 seconds
-  while (Date.now() < target - 500) {
+  // Rapid high-precision poll the last 10 seconds until target time T + 50ms
+  const exactTargetMs = target + 50
+  while (Date.now() < exactTargetMs) {
     if (signal?.aborted) {
       throw new Error('Scheduled mint stopped by user.')
     }
-    const remaining = ((target - Date.now()) / 1000).toFixed(1)
-    process.stdout.write(`\r  ⏳  ${remaining}s remaining...`)
+    const remainingMs = target - Date.now()
+    if (remainingMs > 0) {
+      const remaining = (remainingMs / 1000).toFixed(1)
+      process.stdout.write(`\r  ⏳  ${remaining}s remaining...`)
+    }
+    const sleepSlice = Math.min(50, Math.max(5, exactTargetMs - Date.now()))
     await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(resolve, 100)
+      const timeout = setTimeout(resolve, sleepSlice)
       if (signal) {
         signal.addEventListener('abort', () => {
           clearTimeout(timeout)

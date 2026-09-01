@@ -1,5 +1,5 @@
 import { parseEther, type Address, type Abi } from 'viem'
-import { getPublicClient, getWsPublicClient, loadBalances, filterSolventWallets, getNonce } from '../wallets/manager.js'
+import { getPublicClient, getWsPublicClient, getWallets, loadBalances, filterSolventWallets, getNonce } from '../wallets/manager.js'
 import {
   executeParallelMint,
   COMMON_MINT_ABIS,
@@ -8,7 +8,7 @@ import {
   ZERO_ADDRESS,
   SEADROP_MINT_PUBLIC_ABI,
 } from '../core/tx-builder.js'
-import { analyzeContract } from '../utils/contract-analyzer.js'
+import { fastProbeContract, analyzeContract } from '../utils/contract-analyzer.js'
 import { processAutoTransfer } from '../utils/nft-sweeper.js'
 import { watchForSaleActive } from '../core/block-monitor.js'
 import { getSettings } from '../config/settings.js'
@@ -55,20 +55,33 @@ export async function runSnipeMint(opts: SnipeMintOptions): Promise<void> {
   const wsClient = getWsPublicClient()
   const settings = getSettings()
 
-  // Concurrently analyze contract & load wallet balances in parallel (0ms Blockscout bypass)
-  const [analysis, wallets] = await Promise.all([
-    analyzeContract(publicClient, opts.contractAddress, false, false, true),
-    loadBalances(true, false, opts.walletIndices),
-  ])
+  const preFlightStart = performance.now()
+  logger.info(`⚡ [PRE-FLIGHT] Initializing snipe pre-flight (Wallets, Balances, Route)...`)
 
-  const isSeaDrop = analysis.isSeaDrop || opts.functionName === 'mintSeaDrop' || opts.functionName === 'mintSeaDrop(address,uint256)'
+  const rawWallets = getWallets(false)
+  const targetWallets = opts.walletIndices && opts.walletIndices.length > 0
+    ? rawWallets.filter((w) => opts.walletIndices!.includes(w.index))
+    : rawWallets
+
+  // Concurrently probe contract & load balances
+  const [probeResult, balances] = await Promise.all([
+    fastProbeContract(publicClient, opts.contractAddress),
+    Promise.all(targetWallets.map((w) => publicClient.getBalance({ address: w.address }))),
+  ])
+  const preFlightDurationMs = Math.round(performance.now() - preFlightStart)
+
+  targetWallets.forEach((w, i) => {
+    w.balance = balances[i]
+  })
+
+  const isSeaDrop = probeResult.isSeaDrop || opts.functionName === 'mintSeaDrop' || opts.functionName === 'mintSeaDrop(address,uint256)'
 
   // Auto-detect price if not explicitly provided or if on-chain price is detected
   let effectivePriceEth = opts.priceEth?.trim()
-  if (!effectivePriceEth || effectivePriceEth.toLowerCase() === 'auto' || (parseFloat(effectivePriceEth) === 0 && analysis.mintPriceEth && parseFloat(analysis.mintPriceEth) > 0)) {
-    if (analysis.mintPriceEth) {
-      effectivePriceEth = analysis.mintPriceEth
-      logger.info(`Auto-detected on-chain price: ${effectivePriceEth} ETH`)
+  if (!effectivePriceEth || effectivePriceEth.toLowerCase() === 'auto' || (parseFloat(effectivePriceEth) === 0 && probeResult.mintPriceEth && parseFloat(probeResult.mintPriceEth) > 0)) {
+    if (probeResult.mintPriceEth) {
+      effectivePriceEth = probeResult.mintPriceEth
+      logger.info(`✓ [PRICE] Auto-detected on-chain price: ${effectivePriceEth} ETH`)
     } else {
       effectivePriceEth = '0'
     }
@@ -76,7 +89,7 @@ export async function runSnipeMint(opts: SnipeMintOptions): Promise<void> {
 
   const totalCostEth = (parseFloat(effectivePriceEth) * opts.quantity).toString()
   const totalCostWei = parseEther(totalCostEth)
-  const solvent = filterSolventWallets(wallets, totalCostWei)
+  const solvent = filterSolventWallets(targetWallets, totalCostWei)
 
   if (solvent.length === 0) {
     throw new Error('No wallets have sufficient balance to mint.')
@@ -91,6 +104,26 @@ export async function runSnipeMint(opts: SnipeMintOptions): Promise<void> {
 
   const sigKey = `${opts.functionName}(uint256)`
   const resolvedAbi: Abi = opts.abi ?? [COMMON_MINT_ABIS[sigKey] ?? COMMON_MINT_ABIS['mint(uint256)']]
+
+  let targetAddress = opts.contractAddress
+  let targetAbi = resolvedAbi
+  let targetFunctionName = opts.functionName
+  let targetArgs: unknown[] = [BigInt(opts.quantity)]
+
+  if (isSeaDrop) {
+    targetAddress = SEADROP_ROUTER_ADDRESS
+    targetAbi = SEADROP_MINT_PUBLIC_ABI
+    targetFunctionName = 'mintPublic'
+    targetArgs = [
+      opts.contractAddress,
+      OPENSEA_FEE_RECIPIENT,
+      ZERO_ADDRESS,
+      BigInt(opts.quantity),
+    ]
+  }
+
+  logger.info(`✓ [PRE-FLIGHT] Completed in ${preFlightDurationMs}ms (${solvent.length} solvent wallet(s) armed)`)
+  logger.info(`ℹ [ROUTING] ${isSeaDrop ? `OpenSea SeaDrop Router (${SEADROP_ROUTER_ADDRESS})` : `Direct Contract (${opts.contractAddress})`}`)
 
   return new Promise<void>((resolve, reject) => {
     let unwatch: (() => void) | undefined
@@ -127,28 +160,13 @@ export async function runSnipeMint(opts: SnipeMintOptions): Promise<void> {
 
     const onLive = async (): Promise<void> => {
       try {
-        const analysis = await analyzeContract(publicClient, opts.contractAddress)
-        const isSeaDrop = analysis.isSeaDrop || opts.functionName === 'mintSeaDrop' || opts.functionName === 'mintSeaDrop(address,uint256)'
-
-        let targetAddress = opts.contractAddress
-        let targetAbi = resolvedAbi
-        let targetFunctionName = opts.functionName
-        let targetArgs: unknown[] = [BigInt(opts.quantity)]
-
-        if (isSeaDrop) {
-          logger.info(`Detected OpenSea SeaDrop launchpad — routing mint via SeaDrop Router`)
-          targetAddress = SEADROP_ROUTER_ADDRESS
-          targetAbi = SEADROP_MINT_PUBLIC_ABI
-          targetFunctionName = 'mintPublic'
-          targetArgs = [
-            opts.contractAddress,
-            OPENSEA_FEE_RECIPIENT,
-            ZERO_ADDRESS,
-            BigInt(opts.quantity),
-          ]
-        }
+        const triggerStart = performance.now()
+        logger.fire(`🚀 [SNIPE TRIGGER] Gate is OPEN — launching parallel mint!`)
 
         const nonces = await Promise.all(solvent.map((w) => getNonce(w.address)))
+        const nonceDurationMs = Math.round(performance.now() - triggerStart)
+
+        logger.info(`ℹ [NONCES] Nonces fetched in ${nonceDurationMs}ms`)
 
         const results = await executeParallelMint(publicClient, solvent, {
           contractAddress: targetAddress,

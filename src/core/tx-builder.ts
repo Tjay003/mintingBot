@@ -113,7 +113,7 @@ export async function sendTransaction(
   const ethValue = parseFloat(formatEther(tx.value)).toFixed(4)
   const startTime = performance.now()
 
-  logger.info(`Wallet ${wallet.index} → sending tx  (${ethValue} ETH, nonce ${tx.nonce})`)
+  logger.info(`ℹ [DISPATCH] Wallet ${wallet.index} → sending tx (${ethValue} ETH, nonce #${tx.nonce})`)
 
   const sendStartTime = performance.now()
   const hash = await wallet.client.sendTransaction({
@@ -129,7 +129,7 @@ export async function sendTransaction(
   })
   const submitDurationMs = Math.round(performance.now() - sendStartTime)
 
-  logger.info(`Wallet ${wallet.index} → tx submitted  ${hash}  (${submitDurationMs}ms)`)
+  logger.info(`ℹ [BROADCAST] Wallet ${wallet.index} → tx submitted ${hash} (${submitDurationMs}ms)`)
 
   // Wait for 1 confirmation
   const confirmStartTime = performance.now()
@@ -139,10 +139,10 @@ export async function sendTransaction(
 
   if (receipt.status === 'success') {
     logger.success(
-      `Wallet ${wallet.index} → confirmed ✓  block #${receipt.blockNumber}  (${confirmDurationMs}ms | total: ${(totalDurationMs / 1000).toFixed(2)}s)`,
+      `✓ [CONFIRMED] Wallet ${wallet.index} → confirmed block #${receipt.blockNumber} (${confirmDurationMs}ms | total: ${(totalDurationMs / 1000).toFixed(2)}s)`,
     )
   } else {
-    logger.error(`Wallet ${wallet.index} → tx REVERTED  ${hash}  (total: ${(totalDurationMs / 1000).toFixed(2)}s)`)
+    logger.error(`✗ [REVERTED] Wallet ${wallet.index} → tx REVERTED ${hash} (total: ${(totalDurationMs / 1000).toFixed(2)}s)`)
     throw new Error(`Transaction reverted: ${hash}`)
   }
 
@@ -216,7 +216,7 @@ export async function executeParallelMint(
     ...gasParams,
   }))
 
-  logger.fire(`Firing ${txs.length} wallet(s) simultaneously!`)
+  logger.fire(`🚀 [DISPATCH] Firing ${txs.length} wallet(s) simultaneously!`)
 
   // Send all transactions simultaneously
   const sendResults = await Promise.allSettled(
@@ -288,7 +288,7 @@ export async function sendRawPreSignedTransaction(
   const ethValue = parseFloat(formatEther(preSigned.value)).toFixed(4)
   const startTime = performance.now()
 
-  logger.info(`Wallet ${wallet.index} → blasting pre-signed tx (${ethValue} ETH, nonce ${preSigned.nonce})`)
+  logger.info(`⚡ [DISPATCH] Wallet ${wallet.index} → blasting pre-signed tx (${ethValue} ETH, nonce #${preSigned.nonce})`)
 
   const sendStartTime = performance.now()
   const hash = await publicClient.sendRawTransaction({
@@ -296,7 +296,7 @@ export async function sendRawPreSignedTransaction(
   })
   const submitDurationMs = Math.round(performance.now() - sendStartTime)
 
-  logger.info(`Wallet ${wallet.index} → raw tx broadcasted ${hash} (${submitDurationMs}ms)`)
+  logger.info(`ℹ [BROADCAST] Wallet ${wallet.index} → raw tx broadcasted ${hash} (${submitDurationMs}ms)`)
 
   // Wait for 1 confirmation
   const confirmStartTime = performance.now()
@@ -306,10 +306,10 @@ export async function sendRawPreSignedTransaction(
 
   if (receipt.status === 'success') {
     logger.success(
-      `Wallet ${wallet.index} → confirmed ✓ block #${receipt.blockNumber} (${confirmDurationMs}ms | total: ${(totalDurationMs / 1000).toFixed(2)}s)`,
+      `✓ [CONFIRMED] Wallet ${wallet.index} → confirmed block #${receipt.blockNumber} (${confirmDurationMs}ms | total: ${(totalDurationMs / 1000).toFixed(2)}s)`,
     )
   } else {
-    logger.error(`Wallet ${wallet.index} → tx REVERTED ${hash} (total: ${(totalDurationMs / 1000).toFixed(2)}s)`)
+    logger.error(`✗ [REVERTED] Wallet ${wallet.index} → tx REVERTED ${hash} (total: ${(totalDurationMs / 1000).toFixed(2)}s)`)
     throw new Error(`Transaction reverted: ${hash}`)
   }
 
@@ -338,7 +338,7 @@ export async function executeParallelRawBlast(
   totalDurationMs?: number
   receipt?: TransactionReceipt
 }>> {
-  logger.fire(`⚡ T-0 Blast: Firing ${preSignedTxs.length} pre-signed raw transaction(s) instantly!`)
+  logger.fire(`⚡ [STAGE 2: T-0 BLAST] Firing ${preSignedTxs.length} pre-signed raw transaction(s) instantly!`)
 
   const sendResults = await Promise.allSettled(
     preSignedTxs.map((tx) => sendRawPreSignedTransaction(publicClient, tx)),

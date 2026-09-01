@@ -1,5 +1,5 @@
 import { parseEther, type Address, type Abi } from 'viem'
-import { getPublicClient, loadBalances, filterSolventWallets, getNonce } from '../wallets/manager.js'
+import { getPublicClient, getWallets, loadBalances, filterSolventWallets, getNonce } from '../wallets/manager.js'
 import {
   executeParallelMint,
   COMMON_MINT_ABIS,
@@ -8,7 +8,7 @@ import {
   ZERO_ADDRESS,
   SEADROP_MINT_PUBLIC_ABI,
 } from '../core/tx-builder.js'
-import { analyzeContract } from '../utils/contract-analyzer.js'
+import { fastProbeContract, analyzeContract } from '../utils/contract-analyzer.js'
 import { processAutoTransfer } from '../utils/nft-sweeper.js'
 import { getSettings } from '../config/settings.js'
 import { logger } from '../utils/logger.js'
@@ -48,18 +48,32 @@ export async function runWhitelistMint(opts: WhitelistMintOptions): Promise<void
   const publicClient = getPublicClient()
   const settings = getSettings()
 
-  // Concurrently analyze contract & load wallet balances in parallel (0ms Blockscout bypass)
-  const [analysis, wallets] = await Promise.all([
-    analyzeContract(publicClient, opts.contractAddress, false, false, true),
-    loadBalances(true, false, opts.walletIndices),
+  const preFlightStart = performance.now()
+  logger.info(`⚡ [PRE-FLIGHT] Initializing whitelist mint pre-flight (Wallets, Balances, Route)...`)
+
+  const rawWallets = getWallets(false)
+  const targetWallets = opts.walletIndices && opts.walletIndices.length > 0
+    ? rawWallets.filter((w) => opts.walletIndices!.includes(w.index))
+    : rawWallets
+
+  // Parallel pre-flight
+  const [probeResult, balances] = await Promise.all([
+    fastProbeContract(publicClient, opts.contractAddress),
+    Promise.all(targetWallets.map((w) => publicClient.getBalance({ address: w.address }))),
   ])
-  const isSeaDrop = Boolean(analysis.isSeaDrop)
+  const preFlightDurationMs = Math.round(performance.now() - preFlightStart)
+
+  targetWallets.forEach((w, i) => {
+    w.balance = balances[i]
+  })
+
+  const isSeaDrop = Boolean(probeResult.isSeaDrop)
 
   let effectivePriceEth = opts.priceEth?.trim()
-  if (!effectivePriceEth || effectivePriceEth.toLowerCase() === 'auto' || (parseFloat(effectivePriceEth) === 0 && analysis.mintPriceEth && parseFloat(analysis.mintPriceEth) > 0)) {
-    if (analysis.mintPriceEth) {
-      effectivePriceEth = analysis.mintPriceEth
-      logger.info(`Auto-detected SeaDrop mint price: ${effectivePriceEth} ETH`)
+  if (!effectivePriceEth || effectivePriceEth.toLowerCase() === 'auto' || (parseFloat(effectivePriceEth) === 0 && probeResult.mintPriceEth && parseFloat(probeResult.mintPriceEth) > 0)) {
+    if (probeResult.mintPriceEth) {
+      effectivePriceEth = probeResult.mintPriceEth
+      logger.info(`✓ [PRICE] Auto-detected on-chain price: ${effectivePriceEth} ETH`)
     }
   }
 
@@ -67,7 +81,7 @@ export async function runWhitelistMint(opts: WhitelistMintOptions): Promise<void
   logger.info(`Mode: Whitelist Mint (${opts.wlMode})`)
   logger.info(`Contract: ${opts.contractAddress}`)
   logger.info(`Price: ${effectivePriceEth} ETH × ${opts.quantity} per wallet`)
-  logger.info(`Gas strategy: ${opts.gasStrategy}`)
+  logger.info(`Gas strategy: ${opts.gasStrategy.toUpperCase()}`)
   logger.divider()
 
   let targetAddress: Address = opts.contractAddress
@@ -76,7 +90,6 @@ export async function runWhitelistMint(opts: WhitelistMintOptions): Promise<void
   let targetArgs: unknown[]
 
   if (isSeaDrop) {
-    logger.info(`Detected OpenSea SeaDrop launchpad — routing whitelist mint via SeaDrop Router`)
     targetAddress = SEADROP_ROUTER_ADDRESS
     targetAbi = SEADROP_MINT_PUBLIC_ABI
     targetFunctionName = 'mintPublic'
@@ -113,7 +126,7 @@ export async function runWhitelistMint(opts: WhitelistMintOptions): Promise<void
 
   const totalCostEth = (parseFloat(effectivePriceEth) * opts.quantity).toString()
   const totalCostWei = parseEther(totalCostEth)
-  const solvent = filterSolventWallets(wallets, totalCostWei)
+  const solvent = filterSolventWallets(targetWallets, totalCostWei)
 
   if (solvent.length === 0) {
     throw new Error('No wallets have sufficient balance to mint.')
@@ -128,7 +141,10 @@ export async function runWhitelistMint(opts: WhitelistMintOptions): Promise<void
 
   const nonces = await Promise.all(solvent.map((w) => getNonce(w.address)))
 
-  logger.fire(`WL minting from ${solvent.length} wallet(s)...`)
+  logger.info(`✓ [PRE-FLIGHT] Completed in ${preFlightDurationMs}ms (${solvent.length} solvent wallet(s) armed)`)
+  logger.info(`ℹ [ROUTING] ${isSeaDrop ? `OpenSea SeaDrop Router (${SEADROP_ROUTER_ADDRESS})` : `Direct Contract (${opts.contractAddress})`}`)
+  logger.info(`ℹ [NONCES] Synchronized: ${solvent.map((w, idx) => `Wallet ${w.index} (#${nonces[idx]})`).join(', ')}`)
+  logger.fire(`🚀 [DISPATCH] Firing WL mint for ${solvent.length} wallet(s)...`)
 
   const results = await executeParallelMint(publicClient, solvent, {
     contractAddress: targetAddress,

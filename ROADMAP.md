@@ -57,5 +57,5 @@
 | 2026-08-16 | Pre-Signed T-0 Byte Blast | ✅ **Implemented & Live** (Two-stage T-5s / T-0 engine) |
 | 2026-08-16 | OpenSea SeaDrop Router Auto-Routing | ✅ **Implemented & Live** (`mintPublic` on `0x00005EA00Ac477B1030CE78506496e8C2dE24bf5`) |
 | 2026-08-16 | On-Chain Auto Price Detection | ✅ **Implemented & Live** (`getPublicDrop` prober + UI auto-fill) |
-| 2026-08-17 | Auto-Transfer to Cold Vault | 🟡 Backlog (Ready for future implementation) |
-| 2026-08-17 | Multicall3 Batch Wallet Funder | 🟡 Backlog (Ready for future implementation) |
+| 2026-08-17 | Auto-Transfer to Cold Vault | ✅ **Implemented & Live** (`src/utils/nft-sweeper.ts`) |
+| 2026-08-17 | Multicall3 Batch Wallet Funder | ✅ **Implemented & Live** (`src/wallets/funder.ts`) |
